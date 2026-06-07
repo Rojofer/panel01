@@ -3,6 +3,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import Login from './Login'
+import Tablero from './Tablero'
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -13,7 +14,7 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const snap = await getDoc(doc(db, 'users', firebaseUser.uid))
-        if (snap.exists()) {
+        if (snap.exists() && snap.data().activo) {
           setUser(firebaseUser)
           setUserData(snap.data())
         } else {
@@ -37,12 +38,5 @@ export default function App() {
 
   if (!user) return <Login />
 
-  return (
-    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1 style={{ fontSize: '18px', fontWeight: '500' }}>Panel de Control</h1>
-      <p style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>
-        Bienvenido, {userData?.nombre} · {userData?.rol}
-      </p>
-    </div>
-  )
+  return <Tablero user={user} userData={userData} />
 }
