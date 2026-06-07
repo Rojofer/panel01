@@ -21,6 +21,7 @@ export default function Tablero({ user, userData }) {
   const [gradoFiltro, setGradoFiltro] = useState(null)
   const [sectorDetalle, setSectorDetalle] = useState(null)
   const [turnoExiste, setTurnoExiste] = useState(false)
+  const [modalIniciarTurno, setModalIniciarTurno] = useState(false)
 
   useEffect(() => {
     const hoy = new Date()
@@ -160,7 +161,7 @@ export default function Tablero({ user, userData }) {
           </div>
 
           {!turnoExiste ? (
-            <div onClick={iniciarTurno}
+            <div onClick={() => setModalIniciarTurno(true)}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px solid #1D9E75', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
               onMouseEnter={e => e.currentTarget.style.background='#edfbf4'}
               onMouseLeave={e => e.currentTarget.style.background='#fff'}>
@@ -213,6 +214,23 @@ export default function Tablero({ user, userData }) {
       {drawerOpen && drawerOpen !== 'elegir' && <Drawer franja={drawerOpen} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} franjas={franjas} />}
       {editando && <ModalEditar inc={editando} turnoId={turnoId} categorias={categorias} sectores={sectores} userData={userData} onClose={() => setEditando(null)} />}
       {eliminando && userData.rol === 'owner' && <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />}
+      {modalIniciarTurno && (
+        <ModalIniciarTurno
+          onConfirm={async (fecha) => {
+            const id = fecha.replace(/-/g,'') + '_manana'
+            await setDoc(doc(db,'turnos',id), {
+              fecha, nombre: 'Mañana', estado: 'activo',
+              objetivoGrande: config?.objetivoGrande || 350,
+              objetivoChica: config?.objetivoChica || 100,
+              inicio: config?.inicio || '05:00',
+              fin: config?.fin || '14:00',
+              creadoEn: serverTimestamp()
+            })
+            setTurnoId(id); setTurnoExiste(true); setModalIniciarTurno(false)
+          }}
+          onClose={() => setModalIniciarTurno(false)}
+        />
+      )}
       {sectorDetalle && <ModalSector sector={sectorDetalle} incs={activas.filter(i => i.sectoresResponsables?.includes(sectorDetalle))} onClose={() => setSectorDetalle(null)} />}
     </div>
   )
@@ -482,6 +500,39 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
           <button onClick={guardar} disabled={saving} style={{ flex: 2, padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving?'Guardando...':'Guardar cambios'}</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function ModalIniciarTurno({ onConfirm, onClose }) {
+  const hoy = new Date().toISOString().slice(0,10)
+  const [fecha, setFecha] = useState(hoy)
+  const [saving, setSaving] = useState(false)
+
+  async function confirmar() {
+    setSaving(true)
+    await onConfirm(fecha)
+    setSaving(false)
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.3)', zIndex:20 }} />
+      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:'360px', background:'#fff', borderRadius:'18px', zIndex:21, padding:'28px', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ fontSize:'18px', fontWeight:'700', color:'#111', marginBottom:'6px' }}>Iniciar turno</div>
+        <div style={{ fontSize:'13px', color:'#aaa', marginBottom:'20px' }}>¿Para qué fecha es este turno?</div>
+        <div style={{ marginBottom:'20px' }}>
+          <div style={{ fontSize:'12px', fontWeight:'600', color:'#555', marginBottom:'8px' }}>Fecha de inicio del turno</div>
+          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ width:'100%', fontSize:'14px', borderRadius:'10px', border:'1.5px solid #e8e8e8', padding:'10px 12px' }} />
+        </div>
+        <div style={{ background:'#f0f6ff', border:'1px solid #b5d4f4', borderRadius:'10px', padding:'10px 14px', fontSize:'12px', color:'#185FA5', marginBottom:'20px' }}>
+          El turno puede extenderse más allá de la medianoche — las incidencias quedan bajo esta fecha.
+        </div>
+        <div style={{ display:'flex', gap:'8px' }}>
+          <button onClick={onClose} style={{ flex:1, padding:'10px', fontSize:'13px', borderRadius:'10px', border:'1.5px solid #e8e8e8', background:'#fff', cursor:'pointer', color:'#888', fontWeight:'500' }}>Cancelar</button>
+          <button onClick={confirmar} disabled={saving||!fecha} style={{ flex:2, padding:'10px', fontSize:'13px', fontWeight:'700', borderRadius:'10px', background:'#1D9E75', color:'#fff', border:'none', cursor:'pointer' }}>{saving?'Iniciando...':'Iniciar turno'}</button>
         </div>
       </div>
     </>
