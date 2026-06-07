@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { db, auth } from './firebase'
 import Drawer from './Drawer'
@@ -20,6 +20,7 @@ export default function Tablero({ user, userData }) {
   const [sectorFiltro, setSectorFiltro] = useState(null)
   const [gradoFiltro, setGradoFiltro] = useState(null)
   const [sectorDetalle, setSectorDetalle] = useState(null)
+  const [turnoExiste, setTurnoExiste] = useState(false)
 
   useEffect(() => {
     const hoy = new Date()
@@ -39,6 +40,7 @@ export default function Tablero({ user, userData }) {
 
   useEffect(() => {
     if (!turnoId) return
+    getDoc(doc(db,'turnos',turnoId)).then(s => setTurnoExiste(s.exists()))
     const q = query(collection(db,'turnos',turnoId,'incidencias'), orderBy('horaInicio','asc'))
     return onSnapshot(q, snap => setIncidencias(snap.docs.map(d=>({id:d.id,...d.data()}))))
   }, [turnoId])
@@ -69,6 +71,20 @@ export default function Tablero({ user, userData }) {
   const catColores = ['#BA7517','#E24B4A','#185FA5','#1D9E75','#888780']
 
   const gradoCount = { critico: activas.filter(i=>i.grado==='critico').length, moderado: activas.filter(i=>i.grado==='moderado').length, leve: activas.filter(i=>i.grado==='leve').length, informativo: activas.filter(i=>i.grado==='informativo').length }
+
+  async function iniciarTurno() {
+    await setDoc(doc(db,'turnos',turnoId), {
+      fecha: new Date().toISOString().slice(0,10),
+      nombre: 'Mañana',
+      estado: 'activo',
+      objetivoGrande: config?.objetivoGrande || 350,
+      objetivoChica: config?.objetivoChica || 100,
+      inicio: config?.inicio || '05:00',
+      fin: config?.fin || '14:00',
+      creadoEn: serverTimestamp()
+    })
+    setTurnoExiste(true)
+  }
 
   function toggleGrado(g) { setGradoFiltro(gradoFiltro === g ? null : g) }
   function toggleSector(s) { setSectorFiltro(sectorFiltro === s ? null : s) }
@@ -143,13 +159,23 @@ export default function Tablero({ user, userData }) {
             </div>
           </div>
 
-          <div onClick={() => setDrawerOpen('elegir')}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px dashed #d0d0d0', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor='#185FA5'; e.currentTarget.style.background='#f8fbff' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor='#d0d0d0'; e.currentTarget.style.background='#fff' }}>
-            <span style={{ fontSize: '24px', fontWeight: '300', color: '#185FA5', lineHeight: 1 }}>+</span>
-            <span style={{ fontSize: '14px', fontWeight: '600', color: '#185FA5' }}>Registrar incidencia</span>
-          </div>
+          {!turnoExiste ? (
+            <div onClick={iniciarTurno}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px solid #1D9E75', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
+              onMouseEnter={e => e.currentTarget.style.background='#edfbf4'}
+              onMouseLeave={e => e.currentTarget.style.background='#fff'}>
+              <span style={{ fontSize: '24px', fontWeight: '300', color: '#1D9E75', lineHeight: 1 }}>▶</span>
+              <span style={{ fontSize: '14px', fontWeight: '600', color: '#1D9E75' }}>Iniciar turno de hoy</span>
+            </div>
+          ) : (
+            <div onClick={() => setDrawerOpen('elegir')}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px dashed #d0d0d0', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor='#185FA5'; e.currentTarget.style.background='#f8fbff' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor='#d0d0d0'; e.currentTarget.style.background='#fff' }}>
+              <span style={{ fontSize: '24px', fontWeight: '300', color: '#185FA5', lineHeight: 1 }}>+</span>
+              <span style={{ fontSize: '14px', fontWeight: '600', color: '#185FA5' }}>Registrar incidencia</span>
+            </div>
+          )}
 
           {franjasFiltradas.length === 0 && (
             <div style={{ textAlign: 'center', padding: '3rem', color: '#ccc', fontSize: '14px' }}>
