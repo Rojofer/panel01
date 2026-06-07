@@ -12,7 +12,6 @@ export default function Tablero({ user, userData }) {
   const [config, setConfig] = useState(null)
   const [turnoId, setTurnoId] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [franjaDrawer, setFranjaDrawer] = useState(null)
   const [editando, setEditando] = useState(null)
   const [eliminando, setEliminando] = useState(null)
   const [categorias, setCategorias] = useState([])
@@ -42,17 +41,15 @@ export default function Tablero({ user, userData }) {
 
   const activas = incidencias.filter(i => !i.eliminado)
   const franjas = config ? generarFranjas(config) : []
-
-  const incsPorFranja = franjas.reduce((acc, f) => {
-    acc[f] = activas.filter(i => i.franja === f)
-    return acc
-  }, {})
-
+  const incsPorFranja = franjas.reduce((acc,f) => { acc[f]=activas.filter(i=>i.franja===f); return acc }, {})
   const franjasConInc = franjas.filter(f => incsPorFranja[f].length > 0)
+  const ultimaIncId = activas.length > 0 ? activas[activas.length-1].id : null
+
+  // Sectores con incidencias solamente
+  const sectoresConInc = sectores.filter(s => activas.some(i => i.sectoresResponsables?.includes(s)))
 
   return (
     <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', background: '#F7F7F5', minHeight: '100vh' }}>
-
       <div style={{ background: '#fff', borderBottom: '1px solid #EFEFED', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px', position: 'sticky', top: 0, zIndex: 5 }}>
         <span style={{ fontSize: '16px', fontWeight: '700', color: '#111' }}>Panel de Control</span>
         <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#EDFBF4', color: '#1D9E75', fontWeight: '600' }}>Turno activo</span>
@@ -63,7 +60,7 @@ export default function Tablero({ user, userData }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: '16px', padding: '16px 24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 200px' : '1fr', gap: '16px', padding: '16px 24px' }}>
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '16px' }}>
             {[
@@ -79,7 +76,8 @@ export default function Tablero({ user, userData }) {
             ))}
           </div>
 
-          <div onClick={() => { setFranjaDrawer(null); setDrawerOpen(true) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px dashed #d0d0d0', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px', transition: 'all .15s' }}
+          <div onClick={() => setDrawerOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px dashed #d0d0d0', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor='#185FA5'; e.currentTarget.style.background='#f8fbff' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor='#d0d0d0'; e.currentTarget.style.background='#fff' }}>
             <span style={{ fontSize: '24px', fontWeight: '300', color: '#185FA5', lineHeight: 1 }}>+</span>
@@ -87,9 +85,7 @@ export default function Tablero({ user, userData }) {
           </div>
 
           {franjasConInc.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#bbb', fontSize: '14px' }}>
-              Sin incidencias registradas en el turno
-            </div>
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#ccc', fontSize: '14px' }}>Sin incidencias registradas en el turno</div>
           )}
 
           {franjasConInc.map(franja => (
@@ -97,7 +93,7 @@ export default function Tablero({ user, userData }) {
               <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px', paddingLeft: '2px' }}>
                 {franja.replace('-', ' — ')}
               </div>
-              {incsPorFranja[franja].map(inc => (
+              {incsPorFranja[franja].map((inc, idx) => (
                 <IncCard
                   key={inc.id}
                   inc={inc}
@@ -105,61 +101,43 @@ export default function Tablero({ user, userData }) {
                   userData={userData}
                   onEditar={setEditando}
                   onEliminar={setEliminando}
+                  defaultOpen={inc.id === ultimaIncId}
                 />
               ))}
             </div>
           ))}
         </div>
 
-        <div>
-          <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Por sector</div>
-          {sectores.map(s => {
-            const incs = activas.filter(i => i.sectoresResponsables?.includes(s))
-            const critica = incs.some(i => i.grado === 'critico')
-            const moderada = incs.some(i => i.grado === 'moderado')
-            const color = critica ? '#E24B4A' : moderada ? '#BA7517' : '#1D9E75'
-            return (
-              <div key={s} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #EFEFED', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: color, flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#222' }}>{s}</div>
-                  <div style={{ fontSize: '10px', color: '#bbb' }}>{incs.length > 0 ? `${incs.length} inc.` : 'sin novedades'}</div>
+        {sectoresConInc.length > 0 && (
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Con incidencias</div>
+            {sectoresConInc.map(s => {
+              const incs = activas.filter(i => i.sectoresResponsables?.includes(s))
+              const critica = incs.some(i => i.grado === 'critico')
+              const moderada = incs.some(i => i.grado === 'moderado')
+              const color = critica ? '#E24B4A' : moderada ? '#BA7517' : '#1D9E75'
+              return (
+                <div key={s} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #EFEFED', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#222' }}>{s}</div>
+                    <div style={{ fontSize: '10px', color: '#aaa' }}>{incs.length} inc. · {incs.filter(i=>i.grado==='critico').length > 0 ? `${incs.filter(i=>i.grado==='critico').length} crítica` : 'sin críticas'}</div>
+                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {drawerOpen && (
-        <Drawer
-          franja={franjaDrawer || (franjas[0] || '')}
-          turnoId={turnoId}
-          user={user}
-          userData={userData}
-          onClose={() => setDrawerOpen(false)}
-          franjas={franjas}
-        />
+        <Drawer franja={franjas[0] || ''} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} franjas={franjas} />
       )}
-
       {editando && (
-        <ModalEditar
-          inc={editando}
-          turnoId={turnoId}
-          categorias={categorias}
-          sectores={sectores}
-          userData={userData}
-          onClose={() => setEditando(null)}
-        />
+        <ModalEditar inc={editando} turnoId={turnoId} categorias={categorias} sectores={sectores} userData={userData} onClose={() => setEditando(null)} />
       )}
-
       {eliminando && userData.rol === 'owner' && (
-        <ModalEliminar
-          inc={eliminando}
-          turnoId={turnoId}
-          userData={userData}
-          onClose={() => setEliminando(null)}
-        />
+        <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />
       )}
     </div>
   )
@@ -175,7 +153,8 @@ function generarFranjas(config) {
   return franjas
 }
 
-function IncCard({ inc, turnoId, userData, onEditar, onEliminar }) {
+function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) {
+  const [open, setOpen] = useState(defaultOpen)
   const [notaEdit, setNotaEdit] = useState(false)
   const [nota, setNota] = useState(inc.notaReunion || '')
   const [finEdit, setFinEdit] = useState(false)
@@ -198,7 +177,9 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar }) {
 
   return (
     <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #EFEFED', marginBottom: '10px', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 16px' }}>
+      <div onClick={() => setOpen(!open)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 16px', cursor: 'pointer' }}
+        onMouseEnter={e => e.currentTarget.style.background='#FAFAFA'}
+        onMouseLeave={e => e.currentTarget.style.background='#fff'}>
         <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
         <span style={{ fontSize: '12px', color: '#aaa', fontWeight: '500', minWidth: '38px' }}>{inc.horaInicio}</span>
         <span style={{ fontSize: '13px', fontWeight: '600', color: '#111', minWidth: '90px' }}>
@@ -207,64 +188,57 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar }) {
         </span>
         <span style={{ flex: 1, fontSize: '13px', color: '#555' }}>{inc.categoriaNombre}</span>
         <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: gradoBg[inc.grado], color: gradoColor[inc.grado], fontWeight: '600' }}>{inc.grado}</span>
+        <span style={{ fontSize: '11px', color: '#ccc', marginLeft: '4px' }}>{open ? '▲' : '▼'}</span>
       </div>
 
-      <div style={{ padding: '0 16px 14px', borderTop: '1px solid #F5F5F3' }}>
-        <div style={{ fontSize: '13px', color: '#666', padding: '10px 0', borderBottom: '1px solid #F5F5F3', lineHeight: '1.5' }}>
-          {inc.descripcion}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', paddingTop: '10px', marginBottom: '10px' }}>
-          {[
-            ['Responsable', inc.sectoresResponsables?.join(', ') || (inc.causaExterna ? 'Causa externa' : '—')],
-            ['Afectado', inc.sectoresAfectados?.join(', ') || '—'],
-            ['Inicio · Fin', `${inc.horaInicio} · ${inc.horaFin || 'pendiente'}`],
-          ].map(([l,v]) => (
-            <div key={l} style={{ background: '#F7F7F5', borderRadius: '8px', padding: '7px 10px' }}>
-              <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '2px' }}>{l}</div>
-              <div style={{ fontSize: '12px', fontWeight: '500', color: '#333' }}>{v}</div>
-            </div>
-          ))}
-        </div>
-
-        {!inc.horaFin && !finEdit && (
-          <button onClick={() => setFinEdit(true)} style={{ fontSize: '11px', color: '#185FA5', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 8px', textDecoration: 'underline' }}>
-            + Registrar hora de fin
-          </button>
-        )}
-        {finEdit && (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
-            <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} style={{ fontSize: '13px', borderRadius: '8px', border: '1.5px solid #e8e8e8', padding: '6px 10px', width: '120px' }} />
-            <button onClick={guardarFin} disabled={saving} style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '8px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>Guardar</button>
-            <button onClick={() => setFinEdit(false)} style={{ fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
-          </div>
-        )}
-
-        {!notaEdit ? (
-          inc.notaReunion
-            ? <div style={{ background: '#FFFBF0', border: '1px solid #F5E6B0', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', color: '#7A6000', fontStyle: 'italic', lineHeight: '1.5', marginBottom: '10px', cursor: 'pointer' }} onClick={() => { setNota(inc.notaReunion); setNotaEdit(true) }}>
-                {inc.notaReunion}
+      {open && (
+        <div style={{ padding: '0 16px 14px', borderTop: '1px solid #F5F5F3' }}>
+          <div style={{ fontSize: '13px', color: '#666', padding: '10px 0', borderBottom: '1px solid #F5F5F3', lineHeight: '1.5' }}>{inc.descripcion}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', paddingTop: '10px', marginBottom: '10px' }}>
+            {[
+              ['Responsable', inc.sectoresResponsables?.join(', ') || (inc.causaExterna ? 'Causa externa' : '—')],
+              ['Afectado', inc.sectoresAfectados?.join(', ') || '—'],
+              ['Inicio · Fin', `${inc.horaInicio} · ${inc.horaFin || 'pendiente'}`],
+            ].map(([l,v]) => (
+              <div key={l} style={{ background: '#F7F7F5', borderRadius: '8px', padding: '7px 10px' }}>
+                <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '2px' }}>{l}</div>
+                <div style={{ fontSize: '12px', fontWeight: '500', color: '#333' }}>{v}</div>
               </div>
-            : <div onClick={() => setNotaEdit(true)} style={{ border: '1.5px dashed #e8e8e8', borderRadius: '10px', padding: '9px 12px', fontSize: '12px', color: '#bbb', cursor: 'pointer', marginBottom: '10px' }}>
-                + Agregar nota de reunión...
-              </div>
-        ) : (
-          <div style={{ marginBottom: '10px' }}>
-            <textarea value={nota} onChange={e => setNota(e.target.value)} placeholder="Escribí la respuesta acordada..." style={{ width: '100%', fontSize: '13px', minHeight: '60px', resize: 'vertical', borderRadius: '10px', border: '1.5px solid #185FA5', padding: '8px 12px', fontFamily: 'inherit', marginBottom: '6px' }} />
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button onClick={guardarNota} disabled={saving} style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '8px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '500' }}>{saving ? 'Guardando...' : 'Guardar nota'}</button>
-              <button onClick={() => setNotaEdit(false)} style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
-            </div>
+            ))}
           </div>
-        )}
 
-        <div style={{ display: 'flex', gap: '6px', paddingTop: '8px', borderTop: '1px solid #F5F5F3' }}>
-          <button onClick={() => onEditar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#555', fontWeight: '500' }}>✏️ Editar</button>
-          {userData.rol === 'owner' && (
-            <button onClick={() => onEliminar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '500' }}>🗑 Eliminar</button>
+          {!inc.horaFin && !finEdit && (
+            <button onClick={() => setFinEdit(true)} style={{ fontSize: '11px', color: '#185FA5', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 8px', textDecoration: 'underline' }}>+ Registrar hora de fin</button>
           )}
+          {finEdit && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+              <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} style={{ fontSize: '13px', borderRadius: '8px', border: '1.5px solid #e8e8e8', padding: '6px 10px', width: '120px' }} />
+              <button onClick={guardarFin} disabled={saving} style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '8px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>Guardar</button>
+              <button onClick={() => setFinEdit(false)} style={{ fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
+            </div>
+          )}
+
+          {!notaEdit
+            ? inc.notaReunion
+              ? <div onClick={() => { setNota(inc.notaReunion); setNotaEdit(true) }} style={{ background: '#FFFBF0', border: '1px solid #F5E6B0', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', color: '#7A6000', fontStyle: 'italic', lineHeight: '1.5', marginBottom: '10px', cursor: 'pointer' }}>{inc.notaReunion}</div>
+              : <div onClick={() => setNotaEdit(true)} style={{ border: '1.5px dashed #e8e8e8', borderRadius: '10px', padding: '9px 12px', fontSize: '12px', color: '#bbb', cursor: 'pointer', marginBottom: '10px' }}>+ Agregar nota de reunión...</div>
+            : <div style={{ marginBottom: '10px' }}>
+                <textarea value={nota} onChange={e => setNota(e.target.value)} placeholder="Escribí la respuesta acordada..." style={{ width: '100%', fontSize: '13px', minHeight: '60px', resize: 'vertical', borderRadius: '10px', border: '1.5px solid #185FA5', padding: '8px 12px', fontFamily: 'inherit', marginBottom: '6px' }} />
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button onClick={guardarNota} disabled={saving} style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '8px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '500' }}>{saving ? 'Guardando...' : 'Guardar nota'}</button>
+                  <button onClick={() => setNotaEdit(false)} style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
+                </div>
+              </div>
+          }
+
+          <div style={{ display: 'flex', gap: '6px', paddingTop: '8px', borderTop: '1px solid #F5F5F3' }}>
+            <button onClick={() => onEditar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#555', fontWeight: '500' }}>✏️ Editar</button>
+            {userData.rol === 'owner' && (
+              <button onClick={() => onEliminar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '500' }}>🗑 Eliminar</button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -322,7 +296,7 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
           {busq && (
             <div style={{ border: '1px solid #e8e8e8', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px', maxHeight: '120px', overflowY: 'auto' }}>
               {sectores.filter(s=>s.toLowerCase().includes(busq.toLowerCase())).map(s => (
-                <div key={s} onClick={() => { setResponsables(p => p.includes(s)?p.filter(x=>x!==s):[...p,s]); setBusq('') }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: responsables.includes(s)?'#f0f6ff':'#fff', borderBottom: '1px solid #f5f5f5' }}>
+                <div key={s} onClick={() => { setResponsables(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]); setBusq('') }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: responsables.includes(s)?'#f0f6ff':'#fff', borderBottom: '1px solid #f5f5f5' }}>
                   {responsables.includes(s)?'✓ ':''}{s}
                 </div>
               ))}
