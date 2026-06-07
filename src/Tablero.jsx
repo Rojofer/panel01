@@ -133,6 +133,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
           {turnoExiste && (
             <button onClick={() => { if(window.confirm('¿Cerrar el turno? No podrás agregar más incidencias.')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '600' }}>⏹ Cerrar turno</button>
           )}
+          <button onClick={() => setModalProduccion('panel')} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>📦 Producción</button>
           <button onClick={() => setModalHistorial(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📋 Historial</button>
           {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>⚙️ Config</button>}
           {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📊 Informes</button>}
@@ -209,32 +210,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
               <span style={{ fontSize: '14px', fontWeight: '600', color: '#185FA5' }}>Registrar incidencia</span>
             </div>
           )}
-
-          <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #EFEFED', marginBottom: '16px', overflow: 'hidden' }}>
-            <div style={{ padding: '10px 16px', borderBottom: '1px solid #EFEFED', fontSize: '12px', fontWeight: '600', color: '#555' }}>Producción por franja</div>
-            {franjas.map(franja => {
-              const prod = produccion[franja]
-              const objG = config?.objetivoGrande || 350
-              const objC = config?.objetivoChica || 100
-              return (
-                <div key={franja} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', borderBottom: '1px solid #F5F5F3' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#aaa', minWidth: '110px' }}>{franja.replace('-', ' — ')}</span>
-                  <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
-                    <span style={{ fontSize: '12px', color: prod?.grande != null ? (prod.grande >= objG ? '#1D9E75' : '#E24B4A') : '#ccc' }}>
-                      Grande: <strong>{prod?.grande ?? '—'}</strong>{prod?.grande != null && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#aaa' }}>obj {objG}</span>}
-                    </span>
-                    <span style={{ fontSize: '12px', color: prod?.chica != null ? (prod.chica >= objC ? '#1D9E75' : '#E24B4A') : '#ccc' }}>
-                      Chica: <strong>{prod?.chica ?? '—'}</strong>{prod?.chica != null && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#aaa' }}>obj {objC}</span>}
-                    </span>
-                  </div>
-                  <button onClick={() => setModalProduccion(franja)} style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555', flexShrink: 0 }}>
-                    {prod ? '✏️' : '+'}
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-
+          
           {franjasFiltradas.length === 0 && (
             <div style={{ textAlign: 'center', padding: '3rem', color: '#ccc', fontSize: '14px' }}>
               {hayFiltros ? 'Sin incidencias con los filtros aplicados' : 'Sin incidencias registradas en el turno'}
