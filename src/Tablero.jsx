@@ -275,6 +275,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
           }}
           onClose={() => setModalProduccion(null)}
         />
+        )}
       )}
       {modalHistorial && <ModalHistorial onClose={() => setModalHistorial(false)} turnoIdActual={turnoId} />}
       {modalIniciarTurno && (
