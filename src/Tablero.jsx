@@ -6,6 +6,7 @@ import Drawer from './Drawer'
 
 const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', informativo: '#1D9E75' }
 const gradoBg = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
+const gradoLabel = { critico: 'Crítica', moderado: 'Moderada', leve: 'Leve', informativo: 'Info' }
 
 export default function Tablero({ user, userData }) {
   const [incidencias, setIncidencias] = useState([])
@@ -17,6 +18,7 @@ export default function Tablero({ user, userData }) {
   const [categorias, setCategorias] = useState([])
   const [sectores, setSectores] = useState([])
   const [sectorFiltro, setSectorFiltro] = useState(null)
+  const [gradoFiltro, setGradoFiltro] = useState(null)
   const [sectorDetalle, setSectorDetalle] = useState(null)
 
   useEffect(() => {
@@ -44,29 +46,48 @@ export default function Tablero({ user, userData }) {
   const activas = incidencias.filter(i => !i.eliminado)
   const franjas = config ? generarFranjas(config) : []
   const incsPorFranja = franjas.reduce((acc,f) => { acc[f]=activas.filter(i=>i.franja===f); return acc }, {})
-  const franjasConInc = franjas.filter(f => incsPorFranja[f].length > 0)
   const ultimaIncId = activas.length > 0 ? activas[activas.length-1].id : null
   const sectoresConInc = sectores.filter(s => activas.some(i => i.sectoresResponsables?.includes(s)))
 
-  const incsFiltradas = sectorFiltro
-    ? activas.filter(i => i.sectoresResponsables?.includes(sectorFiltro))
-    : activas
+  const incsFiltradas = activas
+    .filter(i => !sectorFiltro || i.sectoresResponsables?.includes(sectorFiltro))
+    .filter(i => !gradoFiltro || i.grado === gradoFiltro)
 
   const franjasFiltradas = franjas.filter(f => incsFiltradas.filter(i=>i.franja===f).length > 0)
+
+  const tiempoPorCategoria = activas.reduce((acc, i) => {
+    if (i.horaInicio && i.horaFin && i.categoriaNombre) {
+      const [h1,m1] = i.horaInicio.split(':').map(Number)
+      const [h2,m2] = i.horaFin.split(':').map(Number)
+      const mins = Math.max(0, (h2*60+m2) - (h1*60+m1))
+      acc[i.categoriaNombre] = (acc[i.categoriaNombre] || 0) + mins
+    }
+    return acc
+  }, {})
+  const tiempoTotal = Object.values(tiempoPorCategoria).reduce((a,b) => a+b, 0)
+  const tiempoOrdenado = Object.entries(tiempoPorCategoria).sort((a,b) => b[1]-a[1]).slice(0,4)
+  const catColores = ['#BA7517','#E24B4A','#185FA5','#1D9E75','#888780']
+
+  const gradoCount = { critico: activas.filter(i=>i.grado==='critico').length, moderado: activas.filter(i=>i.grado==='moderado').length, leve: activas.filter(i=>i.grado==='leve').length, informativo: activas.filter(i=>i.grado==='informativo').length }
+
+  function toggleGrado(g) { setGradoFiltro(gradoFiltro === g ? null : g) }
+  function toggleSector(s) { setSectorFiltro(sectorFiltro === s ? null : s) }
+
+  const hayFiltros = sectorFiltro || gradoFiltro
 
   return (
     <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', background: '#F7F7F5', minHeight: '100vh' }}>
       <div style={{ background: '#fff', borderBottom: '1px solid #EFEFED', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px', position: 'sticky', top: 0, zIndex: 5 }}>
         <span style={{ fontSize: '16px', fontWeight: '700', color: '#111' }}>Panel de Control</span>
         <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#EDFBF4', color: '#1D9E75', fontWeight: '600' }}>Turno activo</span>
-        {sectorFiltro && (
-          <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            Filtro: {sectorFiltro}
-            <span onClick={() => setSectorFiltro(null)} style={{ cursor: 'pointer', opacity: .6, fontSize: '14px' }}>×</span>
-          </span>
+        {hayFiltros && (
+          <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+            {gradoFiltro && <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: gradoBg[gradoFiltro], color: gradoColor[gradoFiltro], fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>{gradoLabel[gradoFiltro]} <span onClick={() => setGradoFiltro(null)} style={{ cursor: 'pointer', opacity: .7 }}>×</span></span>}
+            {sectorFiltro && <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>{sectorFiltro} <span onClick={() => setSectorFiltro(null)} style={{ cursor: 'pointer', opacity: .7 }}>×</span></span>}
+          </div>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', color: '#aaa' }}>05:00 — 14:00</span>
+          <span style={{ fontSize: '12px', color: '#aaa' }}>{config?.inicio || '05:00'} — {config?.fin || '14:00'}</span>
           <span style={{ fontSize: '13px', fontWeight: '600', color: '#333' }}>Obj: {config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'} ctos</span>
           <button onClick={() => signOut(auth)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#888' }}>Salir</button>
         </div>
@@ -74,18 +95,52 @@ export default function Tablero({ user, userData }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '16px', padding: '16px 24px' }}>
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '16px' }}>
-            {[
-              ['Incidencias', sectorFiltro ? incsFiltradas.length : activas.length, (sectorFiltro ? incsFiltradas : activas).filter(i=>i.grado==='critico').length + ' críticas', '#E24B4A'],
-              ['Tiempo perdido', '— min', 'en paradas', '#BA7517'],
-              ['Cuartos producidos', '—', 'de ' + (config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'), '#1D9E75'],
-            ].map(([l,v,s,c]) => (
-              <div key={l} style={{ background: '#fff', borderRadius: '14px', padding: '14px 16px', border: '1px solid #EFEFED' }}>
-                <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '5px', fontWeight: '500' }}>{l}</div>
-                <div style={{ fontSize: '24px', fontWeight: '700', color: c, lineHeight: 1 }}>{v}</div>
-                <div style={{ fontSize: '11px', color: '#bbb', marginTop: '3px' }}>{s}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ background: '#fff', borderRadius: '14px', padding: '14px 16px', border: '1px solid #EFEFED' }}>
+              <div style={{ fontSize: '11px', color: '#aaa', fontWeight: '500', marginBottom: '4px' }}>Incidencias del turno</div>
+              <div style={{ fontSize: '28px', fontWeight: '700', color: '#E24B4A', lineHeight: 1, marginBottom: '10px' }}>{incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '14px', color: '#aaa', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}</div>
+              {activas.length > 0 && (
+                <div style={{ height: '8px', borderRadius: '4px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '10px' }}>
+                  {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && (
+                    <div key={g} onClick={() => toggleGrado(g)} style={{ height: '100%', background: gradoColor[g], width: `${Math.round(gradoCount[g]/activas.length*100)}%`, borderRadius: '2px', cursor: 'pointer', opacity: gradoFiltro && gradoFiltro !== g ? 0.3 : 1, transition: 'opacity .15s' }} />
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && (
+                  <span key={g} onClick={() => toggleGrado(g)} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '20px', background: gradoBg[g], color: gradoColor[g], fontWeight: '600', cursor: 'pointer', border: `1.5px solid ${gradoFiltro === g ? gradoColor[g] : 'transparent'}`, opacity: gradoFiltro && gradoFiltro !== g ? 0.4 : 1, transition: 'all .15s' }}>
+                    {gradoCount[g]} {gradoLabel[g]}{gradoCount[g] > 1 ? 's' : ''}
+                  </span>
+                ))}
               </div>
-            ))}
+            </div>
+
+            <div style={{ background: '#fff', borderRadius: '14px', padding: '14px 16px', border: '1px solid #EFEFED' }}>
+              <div style={{ fontSize: '11px', color: '#aaa', fontWeight: '500', marginBottom: '4px' }}>Tiempo perdido</div>
+              <div style={{ fontSize: '28px', fontWeight: '700', color: '#BA7517', lineHeight: 1, marginBottom: '10px' }}>
+                {tiempoTotal > 0 ? tiempoTotal : '—'}{tiempoTotal > 0 && <span style={{ fontSize: '16px', fontWeight: '500', marginLeft: '4px' }}>min</span>}
+              </div>
+              {tiempoTotal > 0 ? (
+                <>
+                  <div style={{ height: '8px', borderRadius: '4px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '10px' }}>
+                    {tiempoOrdenado.map(([cat, mins], idx) => (
+                      <div key={cat} style={{ height: '100%', background: catColores[idx], width: `${Math.round(mins/tiempoTotal*100)}%`, borderRadius: '2px' }} title={`${cat}: ${mins} min`} />
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    {tiempoOrdenado.map(([cat, mins], idx) => (
+                      <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#555' }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: catColores[idx], flexShrink: 0 }} />
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
+                        <span style={{ fontWeight: '600', color: '#333' }}>{mins} min</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: '11px', color: '#ccc' }}>Registrá hora de fin en las incidencias para ver el tiempo</div>
+              )}
+            </div>
           </div>
 
           <div onClick={() => setDrawerOpen('elegir')}
@@ -98,7 +153,7 @@ export default function Tablero({ user, userData }) {
 
           {franjasFiltradas.length === 0 && (
             <div style={{ textAlign: 'center', padding: '3rem', color: '#ccc', fontSize: '14px' }}>
-              {sectorFiltro ? `Sin incidencias de ${sectorFiltro} en el turno` : 'Sin incidencias registradas en el turno'}
+              {hayFiltros ? 'Sin incidencias con los filtros aplicados' : 'Sin incidencias registradas en el turno'}
             </div>
           )}
 
@@ -118,40 +173,33 @@ export default function Tablero({ user, userData }) {
           {sectoresConInc.length > 0 && (
             <>
               <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>
-                {sectorFiltro ? 'Sectores · click para quitar filtro' : 'Sectores · click para filtrar'}
+                Sectores · click filtra · doble click detalle
               </div>
               {sectoresConInc.map(s => (
-                <SectorCard
-                  key={s}
-                  sector={s}
-                  incs={activas.filter(i => i.sectoresResponsables?.includes(s))}
-                  seleccionado={sectorFiltro === s}
-                  onClick={() => setSectorFiltro(sectorFiltro === s ? null : s)}
-                  onDobleClick={() => setSectorDetalle(s)}
-                />
+                <SectorCard key={s} sector={s} incs={activas.filter(i => i.sectoresResponsables?.includes(s))} seleccionado={sectorFiltro === s} onClick={() => toggleSector(s)} onDobleClick={() => setSectorDetalle(s)} />
               ))}
             </>
           )}
         </div>
       </div>
 
-      {drawerOpen === 'elegir' && (
-        <ModalFranja franjas={franjas} incsPorFranja={incsPorFranja} onSelect={f => setDrawerOpen(f)} onClose={() => setDrawerOpen(false)} />
-      )}
-      {drawerOpen && drawerOpen !== 'elegir' && (
-        <Drawer franja={drawerOpen} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} franjas={franjas} />
-      )}
-      {editando && (
-        <ModalEditar inc={editando} turnoId={turnoId} categorias={categorias} sectores={sectores} userData={userData} onClose={() => setEditando(null)} />
-      )}
-      {eliminando && userData.rol === 'owner' && (
-        <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />
-      )}
-      {sectorDetalle && (
-        <ModalSector sector={sectorDetalle} incs={activas.filter(i => i.sectoresResponsables?.includes(sectorDetalle))} onClose={() => setSectorDetalle(null)} />
-      )}
+      {drawerOpen === 'elegir' && <ModalFranja franjas={franjas} incsPorFranja={incsPorFranja} onSelect={f => setDrawerOpen(f)} onClose={() => setDrawerOpen(false)} />}
+      {drawerOpen && drawerOpen !== 'elegir' && <Drawer franja={drawerOpen} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} franjas={franjas} />}
+      {editando && <ModalEditar inc={editando} turnoId={turnoId} categorias={categorias} sectores={sectores} userData={userData} onClose={() => setEditando(null)} />}
+      {eliminando && userData.rol === 'owner' && <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />}
+      {sectorDetalle && <ModalSector sector={sectorDetalle} incs={activas.filter(i => i.sectoresResponsables?.includes(sectorDetalle))} onClose={() => setSectorDetalle(null)} />}
     </div>
   )
+}
+
+function generarFranjas(config) {
+  const franjas = []
+  const hIni = parseInt(config.inicio)
+  const hFin = parseInt(config.fin)
+  for (let h = hIni; h < hFin; h++) {
+    franjas.push(`${String(h).padStart(2,'0')}:00-${String(h+1).padStart(2,'0')}:00`)
+  }
+  return franjas
 }
 
 function SectorCard({ sector, incs, seleccionado, onClick, onDobleClick }) {
@@ -166,23 +214,19 @@ function SectorCard({ sector, incs, seleccionado, onClick, onDobleClick }) {
       clickTimer.current = null
       onDobleClick()
     } else {
-      clickTimer.current = setTimeout(() => {
-        clickTimer.current = null
-        onClick()
-      }, 250)
+      clickTimer.current = setTimeout(() => { clickTimer.current = null; onClick() }, 250)
     }
   }
 
   return (
-    <div onClick={handleClick} style={{ background: seleccionado ? '#f0f6ff' : '#fff', borderRadius: '12px', border: `1.5px solid ${seleccionado ? '#185FA5' : '#EFEFED'}`, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', cursor: 'pointer', transition: 'all .15s' }}
+    <div onClick={handleClick}
+      style={{ background: seleccionado ? '#f0f6ff' : '#fff', borderRadius: '12px', border: `1.5px solid ${seleccionado ? '#185FA5' : '#EFEFED'}`, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', cursor: 'pointer', transition: 'all .15s' }}
       onMouseEnter={e => { if (!seleccionado) e.currentTarget.style.borderColor='#b5d4f4' }}
       onMouseLeave={e => { if (!seleccionado) e.currentTarget.style.borderColor='#EFEFED' }}>
       <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, flexShrink: 0 }} />
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: '13px', fontWeight: '600', color: seleccionado ? '#185FA5' : '#222' }}>{sector}</div>
-        <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px' }}>
-          {incs.length} inc. · {incs.filter(i=>i.grado==='critico').length > 0 ? `${incs.filter(i=>i.grado==='critico').length} crítica` : 'sin críticas'}
-        </div>
+        <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px' }}>{incs.length} inc. · {incs.filter(i=>i.grado==='critico').length > 0 ? `${incs.filter(i=>i.grado==='critico').length} crítica` : 'sin críticas'}</div>
       </div>
       <div style={{ fontSize: '10px', color: '#ccc' }}>⋮⋮</div>
     </div>
@@ -196,11 +240,10 @@ function ModalSector({ sector, incs, onClose }) {
     if (i.horaInicio && i.horaFin) {
       const [h1,m1] = i.horaInicio.split(':').map(Number)
       const [h2,m2] = i.horaFin.split(':').map(Number)
-      return acc + (h2*60+m2) - (h1*60+m1)
+      return acc + Math.max(0, (h2*60+m2) - (h1*60+m1))
     }
     return acc
   }, 0)
-  const gradoMasFrecuente = ['critico','moderado','leve','informativo'].find(g => incs.some(i => i.grado === g)) || '—'
 
   return (
     <>
@@ -213,13 +256,12 @@ function ModalSector({ sector, incs, onClose }) {
           </div>
           <button onClick={onClose} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', fontSize: '18px', color: '#888' }}>×</button>
         </div>
-
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px', marginBottom: '20px' }}>
           {[
-            ['Incidencias', incs.length, '#E24B4A'],
+            ['Total', incs.length, '#E24B4A'],
             ['Críticas', criticas.length, '#E24B4A'],
             ['Moderadas', moderadas.length, '#BA7517'],
-            ['Tiempo perdido', tiempoPerdido > 0 ? tiempoPerdido + ' min' : '—', '#BA7517'],
+            ['Tiempo', tiempoPerdido > 0 ? tiempoPerdido + 'm' : '—', '#BA7517'],
           ].map(([l,v,c]) => (
             <div key={l} style={{ background: '#F7F7F5', borderRadius: '10px', padding: '12px 10px', textAlign: 'center' }}>
               <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '4px', fontWeight: '500' }}>{l}</div>
@@ -227,41 +269,24 @@ function ModalSector({ sector, incs, onClose }) {
             </div>
           ))}
         </div>
-
         <div style={{ fontSize: '12px', fontWeight: '600', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Incidencias</div>
-        {incs.length === 0 ? (
-          <div style={{ color: '#ccc', fontSize: '13px', textAlign: 'center', padding: '2rem' }}>Sin incidencias</div>
-        ) : (
-          incs.map(inc => (
-            <div key={inc.id} style={{ background: '#fafafa', borderRadius: '10px', padding: '12px 14px', marginBottom: '8px', border: '1px solid #EFEFED' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
-                <span style={{ fontSize: '12px', color: '#aaa', minWidth: '36px' }}>{inc.horaInicio}</span>
-                <span style={{ fontSize: '13px', fontWeight: '600', color: '#111', flex: 1 }}>{inc.categoriaNombre}</span>
-                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', background: gradoBg[inc.grado], color: gradoColor[inc.grado], fontWeight: '600' }}>{inc.grado}</span>
-              </div>
-              <div style={{ fontSize: '12px', color: '#666', lineHeight: '1.5', marginBottom: inc.notaReunion ? '8px' : '0' }}>{inc.descripcion}</div>
-              {inc.notaReunion && (
-                <div style={{ background: '#FFFBF0', border: '1px solid #F5E6B0', borderRadius: '8px', padding: '8px 10px', fontSize: '11px', color: '#7A6000', fontStyle: 'italic', lineHeight: '1.5' }}>
-                  {inc.notaReunion}
-                </div>
-              )}
+        {incs.map(inc => (
+          <div key={inc.id} style={{ background: '#fafafa', borderRadius: '10px', padding: '12px 14px', marginBottom: '8px', border: '1px solid #EFEFED' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
+              <span style={{ fontSize: '12px', color: '#aaa', minWidth: '36px' }}>{inc.horaInicio}</span>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#111', flex: 1 }}>{inc.categoriaNombre}</span>
+              <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', background: gradoBg[inc.grado], color: gradoColor[inc.grado], fontWeight: '600' }}>{inc.grado}</span>
             </div>
-          ))
-        )}
+            <div style={{ fontSize: '12px', color: '#666', lineHeight: '1.5', marginBottom: inc.notaReunion ? '8px' : '0' }}>{inc.descripcion}</div>
+            {inc.notaReunion && (
+              <div style={{ background: '#FFFBF0', border: '1px solid #F5E6B0', borderRadius: '8px', padding: '8px 10px', fontSize: '11px', color: '#7A6000', fontStyle: 'italic', lineHeight: '1.5' }}>{inc.notaReunion}</div>
+            )}
+          </div>
+        ))}
       </div>
     </>
   )
-}
-
-function generarFranjas(config) {
-  const franjas = []
-  const hIni = parseInt(config.inicio)
-  const hFin = parseInt(config.fin)
-  for (let h = hIni; h < hFin; h++) {
-    franjas.push(`${String(h).padStart(2,'0')}:00-${String(h+1).padStart(2,'0')}:00`)
-  }
-  return franjas
 }
 
 function ModalFranja({ franjas, incsPorFranja, onSelect, onClose }) {
@@ -288,10 +313,7 @@ function ModalFranja({ franjas, incsPorFranja, onSelect, onClose }) {
                   <span style={{ fontSize: '13px', fontWeight: esActual ? '700' : '500', color: esActual ? '#185FA5' : '#333' }}>{f.replace('-', ' — ')}</span>
                   {esActual && <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: '#185FA5', color: '#fff', fontWeight: '600' }}>ahora</span>}
                 </div>
-                {cant > 0
-                  ? <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: '#fef2f2', color: '#E24B4A', fontWeight: '600' }}>{cant} inc.</span>
-                  : <span style={{ fontSize: '11px', color: '#ccc' }}>sin incidencias</span>
-                }
+                {cant > 0 ? <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: '#fef2f2', color: '#E24B4A', fontWeight: '600' }}>{cant} inc.</span> : <span style={{ fontSize: '11px', color: '#ccc' }}>sin incidencias</span>}
               </div>
             )
           })}
@@ -311,9 +333,7 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) 
 
   async function guardarNota() {
     setSaving(true)
-    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), {
-      notaReunion: nota, notaReunionAutor: userData.nombre, notaReunionEn: serverTimestamp()
-    })
+    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), { notaReunion: nota, notaReunionAutor: userData.nombre, notaReunionEn: serverTimestamp() })
     setSaving(false); setNotaEdit(false)
   }
 
@@ -325,8 +345,7 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) 
 
   return (
     <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #EFEFED', marginBottom: '10px', overflow: 'hidden' }}>
-      <div onClick={() => setOpen(!open)}
-        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 16px', cursor: 'pointer' }}
+      <div onClick={() => setOpen(!open)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 16px', cursor: 'pointer' }}
         onMouseEnter={e => e.currentTarget.style.background='#FAFAFA'}
         onMouseLeave={e => e.currentTarget.style.background='#fff'}>
         <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
@@ -355,10 +374,7 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) 
               </div>
             ))}
           </div>
-
-          {!inc.horaFin && !finEdit && (
-            <button onClick={() => setFinEdit(true)} style={{ fontSize: '11px', color: '#185FA5', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 8px', textDecoration: 'underline' }}>+ Registrar hora de fin</button>
-          )}
+          {!inc.horaFin && !finEdit && <button onClick={() => setFinEdit(true)} style={{ fontSize: '11px', color: '#185FA5', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 8px', textDecoration: 'underline' }}>+ Registrar hora de fin</button>}
           {finEdit && (
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
               <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} style={{ fontSize: '13px', borderRadius: '8px', border: '1.5px solid #e8e8e8', padding: '6px 10px', width: '120px' }} />
@@ -366,7 +382,6 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) 
               <button onClick={() => setFinEdit(false)} style={{ fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
             </div>
           )}
-
           {!notaEdit
             ? inc.notaReunion
               ? <div onClick={() => { setNota(inc.notaReunion); setNotaEdit(true) }} style={{ background: '#FFFBF0', border: '1px solid #F5E6B0', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', color: '#7A6000', fontStyle: 'italic', lineHeight: '1.5', marginBottom: '10px', cursor: 'pointer' }}>{inc.notaReunion}</div>
@@ -379,12 +394,9 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) 
                 </div>
               </div>
           }
-
           <div style={{ display: 'flex', gap: '6px', paddingTop: '8px', borderTop: '1px solid #F5F5F3' }}>
             <button onClick={() => onEditar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#555', fontWeight: '500' }}>✏️ Editar</button>
-            {userData.rol === 'owner' && (
-              <button onClick={() => onEliminar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '500' }}>🗑 Eliminar</button>
-            )}
+            {userData.rol === 'owner' && <button onClick={() => onEliminar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '500' }}>🗑 Eliminar</button>}
           </div>
         </div>
       )}
@@ -403,11 +415,7 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
 
   async function guardar() {
     setSaving(true)
-    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), {
-      grado, descripcion, categoriaId: categoria, categoriaNombre,
-      sectoresResponsables: responsables,
-      editadoPor: userData.nombre, editadoEn: serverTimestamp()
-    })
+    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), { grado, descripcion, categoriaId: categoria, categoriaNombre, sectoresResponsables: responsables, editadoPor: userData.nombre, editadoEn: serverTimestamp() })
     setSaving(false); onClose()
   }
 
@@ -422,17 +430,13 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Categoría</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-            {categorias.map(c => (
-              <button key={c.id} onClick={() => { setCategoria(c.id); setCategoriaNombre(c.nombre) }} style={{ padding: '8px', fontSize: '12px', borderRadius: '8px', border: `1.5px solid ${categoria===c.id?'#185FA5':'#e8e8e8'}`, background: categoria===c.id?'#f0f6ff':'#fafafa', color: categoria===c.id?'#185FA5':'#555', cursor: 'pointer', fontWeight: categoria===c.id?'600':'400' }}>{c.nombre}</button>
-            ))}
+            {categorias.map(c => <button key={c.id} onClick={() => { setCategoria(c.id); setCategoriaNombre(c.nombre) }} style={{ padding: '8px', fontSize: '12px', borderRadius: '8px', border: `1.5px solid ${categoria===c.id?'#185FA5':'#e8e8e8'}`, background: categoria===c.id?'#f0f6ff':'#fafafa', color: categoria===c.id?'#185FA5':'#555', cursor: 'pointer', fontWeight: categoria===c.id?'600':'400' }}>{c.nombre}</button>)}
           </div>
         </div>
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Grado</div>
           <div style={{ display: 'flex', gap: '6px' }}>
-            {Object.entries(gradoColor).map(([g,c]) => (
-              <button key={g} onClick={() => setGrado(g)} style={{ flex: 1, padding: '8px 4px', fontSize: '11px', fontWeight: grado===g?'700':'400', borderRadius: '8px', border: `1.5px solid ${grado===g?c:'#e8e8e8'}`, background: grado===g?c+'20':'#fafafa', color: grado===g?c:'#888', cursor: 'pointer' }}>{g}</button>
-            ))}
+            {Object.entries(gradoColor).map(([g,c]) => <button key={g} onClick={() => setGrado(g)} style={{ flex: 1, padding: '8px 4px', fontSize: '11px', fontWeight: grado===g?'700':'400', borderRadius: '8px', border: `1.5px solid ${grado===g?c:'#e8e8e8'}`, background: grado===g?c+'20':'#fafafa', color: grado===g?c:'#888', cursor: 'pointer' }}>{g}</button>)}
           </div>
         </div>
         <div style={{ marginBottom: '16px' }}>
@@ -442,21 +446,11 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
         <div style={{ marginBottom: '20px' }}>
           <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Responsables</div>
           <input value={busq} onChange={e => setBusq(e.target.value)} placeholder="Buscá un sector..." style={{ width: '100%', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '8px 12px', marginBottom: '6px' }} />
-          {busq && (
-            <div style={{ border: '1px solid #e8e8e8', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px', maxHeight: '120px', overflowY: 'auto' }}>
-              {sectores.filter(s=>s.toLowerCase().includes(busq.toLowerCase())).map(s => (
-                <div key={s} onClick={() => { setResponsables(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]); setBusq('') }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: responsables.includes(s)?'#f0f6ff':'#fff', borderBottom: '1px solid #f5f5f5' }}>
-                  {responsables.includes(s)?'✓ ':''}{s}
-                </div>
-              ))}
-            </div>
-          )}
+          {busq && <div style={{ border: '1px solid #e8e8e8', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px', maxHeight: '120px', overflowY: 'auto' }}>
+            {sectores.filter(s=>s.toLowerCase().includes(busq.toLowerCase())).map(s => <div key={s} onClick={() => { setResponsables(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]); setBusq('') }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: responsables.includes(s)?'#f0f6ff':'#fff', borderBottom: '1px solid #f5f5f5' }}>{responsables.includes(s)?'✓ ':''}{s}</div>)}
+          </div>}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-            {responsables.map(r => (
-              <span key={r} style={{ fontSize: '12px', padding: '3px 10px 3px 12px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', border: '1px solid #b5d4f4', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {r} <span onClick={() => setResponsables(p=>p.filter(x=>x!==r))} style={{ cursor: 'pointer', opacity: .6 }}>×</span>
-              </span>
-            ))}
+            {responsables.map(r => <span key={r} style={{ fontSize: '12px', padding: '3px 10px 3px 12px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', border: '1px solid #b5d4f4', display: 'flex', alignItems: 'center', gap: '4px' }}>{r} <span onClick={() => setResponsables(p=>p.filter(x=>x!==r))} style={{ cursor: 'pointer', opacity: .6 }}>×</span></span>)}
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -475,10 +469,7 @@ function ModalEliminar({ inc, turnoId, userData, onClose }) {
   async function confirmar() {
     if (!motivo.trim()) return
     setSaving(true)
-    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), {
-      eliminado: true, eliminadoPor: userData.nombre,
-      eliminadoEn: serverTimestamp(), motivoEliminacion: motivo
-    })
+    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), { eliminado: true, eliminadoPor: userData.nombre, eliminadoEn: serverTimestamp(), motivoEliminacion: motivo })
     setSaving(false); onClose()
   }
 
@@ -488,9 +479,7 @@ function ModalEliminar({ inc, turnoId, userData, onClose }) {
       <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '400px', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '24px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
         <div style={{ fontSize: '17px', fontWeight: '700', color: '#111', marginBottom: '6px' }}>Eliminar incidencia</div>
         <div style={{ fontSize: '13px', color: '#aaa', marginBottom: '16px' }}>Esta acción queda registrada. No se puede deshacer.</div>
-        <div style={{ background: '#fef2f2', border: '1px solid #fde8e8', borderRadius: '10px', padding: '12px', marginBottom: '16px', fontSize: '13px', color: '#333' }}>
-          <strong>{inc.categoriaNombre}</strong> · {inc.horaInicio} · {inc.grado}
-        </div>
+        <div style={{ background: '#fef2f2', border: '1px solid #fde8e8', borderRadius: '10px', padding: '12px', marginBottom: '16px', fontSize: '13px', color: '#333' }}><strong>{inc.categoriaNombre}</strong> · {inc.horaInicio} · {inc.grado}</div>
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '6px' }}>Motivo <span style={{ color: '#E24B4A' }}>*</span></div>
           <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="¿Por qué se elimina?" style={{ width: '100%', fontSize: '13px', minHeight: '60px', resize: 'vertical', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '8px 12px', fontFamily: 'inherit' }} />
