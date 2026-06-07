@@ -238,8 +238,8 @@ export default function Tablero({ user, userData, onVerInforme }) {
       {eliminando && userData.rol === 'owner' && <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />}
       {sectorDetalle && <ModalSector sector={sectorDetalle} incs={activas.filter(i => i.sectoresResponsables?.includes(sectorDetalle))} onClose={() => setSectorDetalle(null)} />}
       {modalConfig && <Configuracion onClose={() => setModalConfig(false)} />}
-      {modalProduccion && (
-        {panelProduccion && <Produccion turnoId={turnoId} config={config} onClose={() => setPanelProduccion(false)} />}
+      
+      {panelProduccion && <Produccion turnoId={turnoId} config={config} onClose={() => setPanelProduccion(false)} />}
       {modalHistorial && <ModalHistorial onClose={() => setModalHistorial(false)} turnoIdActual={turnoId} />}
       {modalIniciarTurno && (
         <ModalIniciarTurno
