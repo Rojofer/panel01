@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, doc, getDoc, getDocs, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { db, auth } from './firebase'
 import Drawer from './Drawer'
@@ -22,6 +22,7 @@ export default function Tablero({ user, userData }) {
   const [sectorDetalle, setSectorDetalle] = useState(null)
   const [turnoExiste, setTurnoExiste] = useState(false)
   const [modalIniciarTurno, setModalIniciarTurno] = useState(false)
+  const [modalHistorial, setModalHistorial] = useState(false)
   const [horaActual, setHoraActual] = useState('')
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
@@ -115,6 +116,7 @@ export default function Tablero({ user, userData }) {
             <button onClick={() => { if(window.confirm('¿Cerrar el turno? No podrás agregar más incidencias.')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #fde8e8', background:'#fef9f9', cursor:'pointer', color:'#E24B4A', fontWeight:'600' }}>⏹ Cerrar turno</button>
           )}
           <span style={{ fontSize: '13px', fontWeight: '600', color: '#333' }}>Obj: {config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'} ctos</span>
+          <button onClick={() => setModalHistorial(true)} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>📋 Historial</button>
           <button onClick={() => signOut(auth)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#888' }}>Salir</button>
         </div>
       </div>
@@ -223,6 +225,7 @@ export default function Tablero({ user, userData }) {
       {drawerOpen && drawerOpen !== 'elegir' && <Drawer franja={drawerOpen} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} franjas={franjas} />}
       {editando && <ModalEditar inc={editando} turnoId={turnoId} categorias={categorias} sectores={sectores} userData={userData} onClose={() => setEditando(null)} />}
       {eliminando && userData.rol === 'owner' && <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />}
+      {modalHistorial && <ModalHistorial onClose={() => setModalHistorial(false)} turnoIdActual={turnoId} />}
       {modalIniciarTurno && (
         <ModalIniciarTurno
           onConfirm={async (fecha) => {
@@ -510,6 +513,86 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
           <button onClick={onClose} style={{ flex: 1, padding: '10px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
           <button onClick={guardar} disabled={saving} style={{ flex: 2, padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving?'Guardando...':'Guardar cambios'}</button>
         </div>
+      </div>
+    </>
+  )
+}
+
+function ModalHistorial({ onClose, turnoIdActual }) {
+  const [turnos, setTurnos] = useState([])
+  const [turnoAbierto, setTurnoAbierto] = useState(null)
+  const [incidencias, setIncidencias] = useState([])
+  const [cargando, setCargando] = useState(true)
+
+  useEffect(() => {
+    getDocs(collection(db,'turnos')).then(snap => {
+      const lista = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(t => t.id !== turnoIdActual)
+        .sort((a,b) => b.id.localeCompare(a.id))
+      setTurnos(lista)
+      setCargando(false)
+    })
+  }, [])
+
+  async function abrirTurno(turnoId) {
+    if (turnoAbierto === turnoId) { setTurnoAbierto(null); setIncidencias([]); return }
+    setTurnoAbierto(turnoId)
+    const snap = await getDocs(query(collection(db,'turnos',turnoId,'incidencias'), orderBy('horaInicio','asc')))
+    setIncidencias(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => !i.eliminado))
+  }
+
+  const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', informativo: '#1D9E75' }
+  const gradoBg = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.3)', zIndex:20 }} />
+      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:'580px', maxHeight:'85vh', overflowY:'auto', background:'#fff', borderRadius:'18px', zIndex:21, padding:'28px', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
+          <div style={{ fontSize:'18px', fontWeight:'700', color:'#111' }}>Historial de turnos</div>
+          <button onClick={onClose} style={{ width:'32px', height:'32px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', fontSize:'18px', color:'#888' }}>×</button>
+        </div>
+
+        {cargando && <div style={{ textAlign:'center', color:'#aaa', padding:'2rem' }}>Cargando...</div>}
+        {!cargando && turnos.length === 0 && <div style={{ textAlign:'center', color:'#ccc', padding:'2rem' }}>Sin turnos anteriores</div>}
+
+        {turnos.map(t => {
+          const abierto = turnoAbierto === t.id
+          return (
+            <div key={t.id} style={{ marginBottom:'8px', border:'1px solid #EFEFED', borderRadius:'12px', overflow:'hidden' }}>
+              <div onClick={() => abrirTurno(t.id)} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 16px', cursor:'pointer', background: abierto ? '#f8fbff' : '#fff' }}
+                onMouseEnter={e => e.currentTarget.style.background='#fafafa'}
+                onMouseLeave={e => e.currentTarget.style.background= abierto ? '#f8fbff' : '#fff'}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:'14px', fontWeight:'600', color:'#111' }}>{t.fecha}</div>
+                  <div style={{ fontSize:'11px', color:'#aaa', marginTop:'2px' }}>{t.inicio || '05:00'} — {t.fin || '14:00'} · {t.estado === 'cerrado' ? 'Cerrado' : 'Activo'}</div>
+                </div>
+                <span style={{ fontSize:'11px', color:'#ccc' }}>{abierto ? '▲' : '▼'}</span>
+              </div>
+
+              {abierto && (
+                <div style={{ borderTop:'1px solid #F5F5F3', padding:'12px 16px' }}>
+                  {incidencias.length === 0
+                    ? <div style={{ color:'#ccc', fontSize:'13px', textAlign:'center', padding:'1rem' }}>Sin incidencias</div>
+                    : incidencias.map(inc => (
+                      <div key={inc.id} style={{ background:'#fafafa', borderRadius:'10px', padding:'10px 14px', marginBottom:'8px', border:'1px solid #EFEFED' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom: inc.descripcion ? '6px' : '0' }}>
+                          <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:gradoColor[inc.grado], flexShrink:0 }} />
+                          <span style={{ fontSize:'12px', color:'#aaa', minWidth:'36px' }}>{inc.horaInicio}</span>
+                          <span style={{ fontSize:'13px', fontWeight:'600', color:'#111', flex:1 }}>{inc.categoriaNombre}</span>
+                          <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'10px', background:gradoBg[inc.grado], color:gradoColor[inc.grado], fontWeight:'600' }}>{inc.grado}</span>
+                        </div>
+                        {inc.descripcion && <div style={{ fontSize:'12px', color:'#666', lineHeight:'1.5', marginBottom: inc.notaReunion ? '6px' : '0', paddingLeft:'16px' }}>{inc.descripcion}</div>}
+                        {inc.notaReunion && <div style={{ background:'#FFFBF0', border:'1px solid #F5E6B0', borderRadius:'8px', padding:'7px 10px', fontSize:'11px', color:'#7A6000', fontStyle:'italic', marginLeft:'16px' }}>{inc.notaReunion}</div>}
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </>
   )
