@@ -42,8 +42,8 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
     getDoc(doc(db, 'config', 'categorias')).then(snap => {
       if (snap.exists()) setCategorias(Object.entries(snap.data()).map(([id, n]) => ({ id, nombre: n })).sort((a, b) => a.nombre.localeCompare(b.nombre)))
     })
-    const now = new Date()
-    setHoraInicio(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`)
+    const horaFranjaInicio = franja.split('-')[0]
+    setHoraInicio(horaFranjaInicio)
   }, [])
 
   function toggleAfect(s) { setAfectados(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]) }
