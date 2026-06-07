@@ -44,8 +44,6 @@ export default function Tablero({ user, userData }) {
   const incsPorFranja = franjas.reduce((acc,f) => { acc[f]=activas.filter(i=>i.franja===f); return acc }, {})
   const franjasConInc = franjas.filter(f => incsPorFranja[f].length > 0)
   const ultimaIncId = activas.length > 0 ? activas[activas.length-1].id : null
-
-  // Sectores con incidencias solamente
   const sectoresConInc = sectores.filter(s => activas.some(i => i.sectoresResponsables?.includes(s)))
 
   return (
@@ -60,7 +58,7 @@ export default function Tablero({ user, userData }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 200px' : '1fr', gap: '16px', padding: '16px 24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 280px' : '1fr', gap: '16px', padding: '16px 24px' }}>
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '16px' }}>
             {[
@@ -76,7 +74,8 @@ export default function Tablero({ user, userData }) {
             ))}
           </div>
 
-          <div onClick={() => setDrawerOpen(true)}
+          <div
+            onClick={() => setDrawerOpen('elegir')}
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px dashed #d0d0d0', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor='#185FA5'; e.currentTarget.style.background='#f8fbff' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor='#d0d0d0'; e.currentTarget.style.background='#fff' }}>
@@ -93,7 +92,7 @@ export default function Tablero({ user, userData }) {
               <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px', paddingLeft: '2px' }}>
                 {franja.replace('-', ' — ')}
               </div>
-              {incsPorFranja[franja].map((inc, idx) => (
+              {incsPorFranja[franja].map(inc => (
                 <IncCard
                   key={inc.id}
                   inc={inc}
@@ -117,11 +116,11 @@ export default function Tablero({ user, userData }) {
               const moderada = incs.some(i => i.grado === 'moderado')
               const color = critica ? '#E24B4A' : moderada ? '#BA7517' : '#1D9E75'
               return (
-                <div key={s} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #EFEFED', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+                <div key={s} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #EFEFED', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, flexShrink: 0 }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#222' }}>{s}</div>
-                    <div style={{ fontSize: '10px', color: '#aaa' }}>{incs.length} inc. · {incs.filter(i=>i.grado==='critico').length > 0 ? `${incs.filter(i=>i.grado==='critico').length} crítica` : 'sin críticas'}</div>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#222' }}>{s}</div>
+                    <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px' }}>{incs.length} inc. · {incs.filter(i=>i.grado==='critico').length > 0 ? `${incs.filter(i=>i.grado==='critico').length} crítica` : 'sin críticas'}</div>
                   </div>
                 </div>
               )
@@ -130,8 +129,16 @@ export default function Tablero({ user, userData }) {
         )}
       </div>
 
-      {drawerOpen && (
-        <Drawer franja={franjas[0] || ''} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} franjas={franjas} />
+      {drawerOpen === 'elegir' && (
+        <ModalFranja
+          franjas={franjas}
+          incsPorFranja={incsPorFranja}
+          onSelect={f => setDrawerOpen(f)}
+          onClose={() => setDrawerOpen(false)}
+        />
+      )}
+      {drawerOpen && drawerOpen !== 'elegir' && (
+        <Drawer franja={drawerOpen} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} franjas={franjas} />
       )}
       {editando && (
         <ModalEditar inc={editando} turnoId={turnoId} categorias={categorias} sectores={sectores} userData={userData} onClose={() => setEditando(null)} />
@@ -151,6 +158,44 @@ function generarFranjas(config) {
     franjas.push(`${String(h).padStart(2,'0')}:00-${String(h+1).padStart(2,'0')}:00`)
   }
   return franjas
+}
+
+function ModalFranja({ franjas, incsPorFranja, onSelect, onClose }) {
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '380px', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '24px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ fontSize: '17px', fontWeight: '700', color: '#111' }}>¿En qué franja ocurrió?</div>
+          <button onClick={onClose} style={{ width: '30px', height: '30px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', fontSize: '16px', color: '#888' }}>×</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '400px', overflowY: 'auto' }}>
+          {franjas.map(f => {
+            const cant = incsPorFranja[f]?.length || 0
+            const label = f.replace('-', ' — ')
+            const hActual = new Date().getHours()
+            const hFranja = parseInt(f.split(':')[0])
+            const esActual = hFranja === hActual
+            return (
+              <div key={f} onClick={() => onSelect(f)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: '12px', border: `1.5px solid ${esActual ? '#185FA5' : '#e8e8e8'}`, background: esActual ? '#f0f6ff' : '#fafafa', cursor: 'pointer' }}
+                onMouseEnter={e => { if (!esActual) { e.currentTarget.style.borderColor='#185FA5'; e.currentTarget.style.background='#f8fbff' }}}
+                onMouseLeave={e => { if (!esActual) { e.currentTarget.style.borderColor='#e8e8e8'; e.currentTarget.style.background='#fafafa' }}}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: esActual ? '700' : '500', color: esActual ? '#185FA5' : '#333' }}>{label}</span>
+                  {esActual && <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: '#185FA5', color: '#fff', fontWeight: '600' }}>ahora</span>}
+                </div>
+                {cant > 0
+                  ? <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: '#fef2f2', color: '#E24B4A', fontWeight: '600' }}>{cant} inc.</span>
+                  : <span style={{ fontSize: '11px', color: '#ccc' }}>sin incidencias</span>
+                }
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </>
+  )
 }
 
 function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) {
@@ -177,7 +222,8 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) 
 
   return (
     <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #EFEFED', marginBottom: '10px', overflow: 'hidden' }}>
-      <div onClick={() => setOpen(!open)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 16px', cursor: 'pointer' }}
+      <div onClick={() => setOpen(!open)}
+        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 16px', cursor: 'pointer' }}
         onMouseEnter={e => e.currentTarget.style.background='#FAFAFA'}
         onMouseLeave={e => e.currentTarget.style.background='#fff'}>
         <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
