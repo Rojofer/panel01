@@ -3,6 +3,7 @@ import { collection, query, orderBy, onSnapshot, doc, getDoc, getDocs, setDoc, u
 import { signOut } from 'firebase/auth'
 import { db, auth } from './firebase'
 import Drawer from './Drawer'
+import Configuracion from './Configuracion'
 
 const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', informativo: '#1D9E75' }
 const gradoBg = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
@@ -23,6 +24,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [turnoExiste, setTurnoExiste] = useState(false)
   const [modalIniciarTurno, setModalIniciarTurno] = useState(false)
   const [modalHistorial, setModalHistorial] = useState(false)
+  const [modalConfig, setModalConfig] = useState(false)
   const [horaActual, setHoraActual] = useState('')
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
@@ -116,6 +118,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
             <button onClick={() => { if(window.confirm('¿Cerrar el turno? No podrás agregar más incidencias.')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #fde8e8', background:'#fef9f9', cursor:'pointer', color:'#E24B4A', fontWeight:'600' }}>⏹ Cerrar turno</button>
           )}
           <span style={{ fontSize: '13px', fontWeight: '600', color: '#333' }}>Obj: {config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'} ctos</span>
+          {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>⚙️ Config</button>}
           {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>📊 Informes</button>}
           <button onClick={() => signOut(auth)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#888' }}>Salir</button>
         </div>
@@ -225,6 +228,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
       {drawerOpen && drawerOpen !== 'elegir' && <Drawer franja={drawerOpen} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} franjas={franjas} />}
       {editando && <ModalEditar inc={editando} turnoId={turnoId} categorias={categorias} sectores={sectores} userData={userData} onClose={() => setEditando(null)} />}
       {eliminando && userData.rol === 'owner' && <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />}
+      {modalConfig && <Configuracion onClose={() => setModalConfig(false)} />}
       {modalHistorial && <ModalHistorial onClose={() => setModalHistorial(false)} turnoIdActual={turnoId} />}
       {modalIniciarTurno && (
         <ModalIniciarTurno
