@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react'
-import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { db, auth } from './firebase'
 import Drawer from './Drawer'
 
 const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', informativo: '#1D9E75' }
+const gradoBg = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
 
 export default function Tablero({ user, userData }) {
   const [incidencias, setIncidencias] = useState([])
   const [config, setConfig] = useState(null)
   const [turnoId, setTurnoId] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [franjaDrawer, setFranjaDrawer] = useState('')
+  const [franjaDrawer, setFranjaDrawer] = useState(null)
   const [editando, setEditando] = useState(null)
   const [eliminando, setEliminando] = useState(null)
   const [categorias, setCategorias] = useState([])
@@ -19,79 +20,126 @@ export default function Tablero({ user, userData }) {
 
   useEffect(() => {
     const hoy = new Date()
-    const id = hoy.toISOString().slice(0, 10).replace(/-/g, '') + '_manana'
+    const id = hoy.toISOString().slice(0,10).replace(/-/g,'') + '_manana'
     setTurnoId(id)
   }, [])
 
   useEffect(() => {
-    getDoc(doc(db, 'config', 'turno')).then(s => s.exists() && setConfig(s.data()))
-    getDoc(doc(db, 'config', 'categorias')).then(s => {
-      if (s.exists()) setCategorias(Object.entries(s.data()).map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre)))
+    getDoc(doc(db,'config','turno')).then(s => s.exists() && setConfig(s.data()))
+    getDoc(doc(db,'config','categorias')).then(s => {
+      if (s.exists()) setCategorias(Object.entries(s.data()).map(([id,nombre])=>({id,nombre})).sort((a,b)=>a.nombre.localeCompare(b.nombre)))
     })
-    getDoc(doc(db, 'config', 'sectores')).then(s => {
+    getDoc(doc(db,'config','sectores')).then(s => {
       if (s.exists()) setSectores(Object.values(s.data()).sort())
     })
   }, [])
 
   useEffect(() => {
     if (!turnoId) return
-    const q = query(collection(db, 'turnos', turnoId, 'incidencias'), orderBy('horaInicio', 'asc'))
-    return onSnapshot(q, snap => setIncidencias(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+    const q = query(collection(db,'turnos',turnoId,'incidencias'), orderBy('horaInicio','asc'))
+    return onSnapshot(q, snap => setIncidencias(snap.docs.map(d=>({id:d.id,...d.data()}))))
   }, [turnoId])
 
+  const activas = incidencias.filter(i => !i.eliminado)
   const franjas = config ? generarFranjas(config) : []
-  const incActivas = incidencias.filter(i => !i.eliminado)
+
+  const incsPorFranja = franjas.reduce((acc, f) => {
+    acc[f] = activas.filter(i => i.franja === f)
+    return acc
+  }, {})
+
+  const franjasConInc = franjas.filter(f => incsPorFranja[f].length > 0)
 
   return (
-    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: '13px', background: '#f5f4ef', minHeight: '100vh' }}>
+    <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', background: '#F7F7F5', minHeight: '100vh' }}>
 
-      <div style={{ background: '#fff', borderBottom: '1px solid #eee', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <span style={{ fontSize: '15px', fontWeight: '600', color: '#111' }}>Panel de Control</span>
-        <span style={{ fontSize: '11px', padding: '2px 10px', borderRadius: '20px', background: '#e8f5ee', color: '#1D9E75', fontWeight: '500' }}>Turno activo</span>
+      <div style={{ background: '#fff', borderBottom: '1px solid #EFEFED', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px', position: 'sticky', top: 0, zIndex: 5 }}>
+        <span style={{ fontSize: '16px', fontWeight: '700', color: '#111' }}>Panel de Control</span>
+        <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#EDFBF4', color: '#1D9E75', fontWeight: '600' }}>Turno activo</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', color: '#999' }}>Obj: {config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'} ctos</span>
+          <span style={{ fontSize: '12px', color: '#aaa' }}>05:00 — 14:00</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: '#333' }}>Obj: {config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'} ctos</span>
           <button onClick={() => signOut(auth)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#888' }}>Salir</button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: '12px', padding: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: '16px', padding: '16px 24px' }}>
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', marginBottom: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '16px' }}>
             {[
-              ['Incidencias', incActivas.length, incActivas.filter(i=>i.grado==='critico').length + ' críticas', '#E24B4A'],
-              ['Tiempo perdido', '—', 'min en el turno', '#BA7517'],
+              ['Incidencias', activas.length, activas.filter(i=>i.grado==='critico').length + ' críticas', '#E24B4A'],
+              ['Tiempo perdido', '— min', 'en paradas', '#BA7517'],
               ['Cuartos producidos', '—', 'de ' + (config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'), '#1D9E75'],
             ].map(([l,v,s,c]) => (
-              <div key={l} style={{ background: '#fff', border: '1px solid #eee', borderRadius: '10px', padding: '12px 14px' }}>
-                <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px' }}>{l}</div>
-                <div style={{ fontSize: '22px', fontWeight: '600', color: c, lineHeight: 1 }}>{v}</div>
-                <div style={{ fontSize: '11px', color: '#aaa', marginTop: '3px' }}>{s}</div>
+              <div key={l} style={{ background: '#fff', borderRadius: '14px', padding: '14px 16px', border: '1px solid #EFEFED' }}>
+                <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '5px', fontWeight: '500' }}>{l}</div>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: c, lineHeight: 1 }}>{v}</div>
+                <div style={{ fontSize: '11px', color: '#bbb', marginTop: '3px' }}>{s}</div>
               </div>
             ))}
           </div>
 
-          {franjas.map(franja => (
-            <FranjaRow
-              key={franja}
-              franja={franja}
-              incs={incActivas.filter(i => i.franja === franja)}
-              onAgregar={() => { setFranjaDrawer(franja); setDrawerOpen(true) }}
-              onEditar={setEditando}
-              onEliminar={setEliminando}
-              turnoId={turnoId}
-              userData={userData}
-            />
+          <div onClick={() => { setFranjaDrawer(null); setDrawerOpen(true) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px dashed #d0d0d0', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px', transition: 'all .15s' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor='#185FA5'; e.currentTarget.style.background='#f8fbff' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor='#d0d0d0'; e.currentTarget.style.background='#fff' }}>
+            <span style={{ fontSize: '24px', fontWeight: '300', color: '#185FA5', lineHeight: 1 }}>+</span>
+            <span style={{ fontSize: '14px', fontWeight: '600', color: '#185FA5' }}>Registrar incidencia</span>
+          </div>
+
+          {franjasConInc.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#bbb', fontSize: '14px' }}>
+              Sin incidencias registradas en el turno
+            </div>
+          )}
+
+          {franjasConInc.map(franja => (
+            <div key={franja}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px', paddingLeft: '2px' }}>
+                {franja.replace('-', ' — ')}
+              </div>
+              {incsPorFranja[franja].map(inc => (
+                <IncCard
+                  key={inc.id}
+                  inc={inc}
+                  turnoId={turnoId}
+                  userData={userData}
+                  onEditar={setEditando}
+                  onEliminar={setEliminando}
+                />
+              ))}
+            </div>
           ))}
         </div>
 
         <div>
-          <div style={{ fontSize: '11px', fontWeight: '600', color: '#999', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Por sector</div>
-          <SemaforoSectores incidencias={incActivas} sectores={sectores} />
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Por sector</div>
+          {sectores.map(s => {
+            const incs = activas.filter(i => i.sectoresResponsables?.includes(s))
+            const critica = incs.some(i => i.grado === 'critico')
+            const moderada = incs.some(i => i.grado === 'moderado')
+            const color = critica ? '#E24B4A' : moderada ? '#BA7517' : '#1D9E75'
+            return (
+              <div key={s} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #EFEFED', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#222' }}>{s}</div>
+                  <div style={{ fontSize: '10px', color: '#bbb' }}>{incs.length > 0 ? `${incs.length} inc.` : 'sin novedades'}</div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
       {drawerOpen && (
-        <Drawer franja={franjaDrawer} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} />
+        <Drawer
+          franja={franjaDrawer || (franjas[0] || '')}
+          turnoId={turnoId}
+          user={user}
+          userData={userData}
+          onClose={() => setDrawerOpen(false)}
+          franjas={franjas}
+        />
       )}
 
       {editando && (
@@ -127,40 +175,7 @@ function generarFranjas(config) {
   return franjas
 }
 
-function FranjaRow({ franja, incs, onAgregar, onEditar, onEliminar, turnoId, userData }) {
-  const [open, setOpen] = useState(false)
-  const label = franja.replace('-', ' — ')
-  const criticas = incs.filter(i => i.grado === 'critico').length
-  const moderadas = incs.filter(i => i.grado === 'moderado').length
-
-  return (
-    <div style={{ background: '#fff', border: '1px solid #eee', borderRadius: '12px', marginBottom: '8px', overflow: 'hidden' }}>
-      <div onClick={() => setOpen(!open)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', cursor: 'pointer' }}>
-        <span style={{ fontSize: '13px', fontWeight: '500', color: '#333' }}>{label}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {criticas > 0 && <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: '#fef2f2', color: '#E24B4A', fontWeight: '500' }}>{criticas} crítica{criticas > 1 ? 's' : ''}</span>}
-          {moderadas > 0 && <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: '#fff8ee', color: '#BA7517', fontWeight: '500' }}>{moderadas} mod.</span>}
-          {incs.length === 0 && <span style={{ fontSize: '11px', color: '#ccc' }}>sin incidencias</span>}
-          <span style={{ fontSize: '10px', color: '#ccc', marginLeft: '4px' }}>{open ? '▲' : '▼'}</span>
-        </div>
-      </div>
-
-      {open && (
-        <div style={{ borderTop: '1px solid #f5f5f5' }}>
-          {incs.map(inc => (
-            <IncRow key={inc.id} inc={inc} turnoId={turnoId} onEditar={onEditar} onEliminar={onEliminar} userData={userData} />
-          ))}
-          <div onClick={onAgregar} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 14px', fontSize: '12px', color: '#185FA5', borderTop: '1px dashed #dce8f5', background: '#f8fbff', cursor: 'pointer', fontWeight: '500' }}>
-            + Cargar incidencia en esta franja
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function IncRow({ inc, turnoId, onEditar, onEliminar, userData }) {
-  const [open, setOpen] = useState(false)
+function IncCard({ inc, turnoId, userData, onEditar, onEliminar }) {
   const [notaEdit, setNotaEdit] = useState(false)
   const [nota, setNota] = useState(inc.notaReunion || '')
   const [finEdit, setFinEdit] = useState(false)
@@ -169,99 +184,87 @@ function IncRow({ inc, turnoId, onEditar, onEliminar, userData }) {
 
   async function guardarNota() {
     setSaving(true)
-    await updateDoc(doc(db, 'turnos', turnoId, 'incidencias', inc.id), {
-      notaReunion: nota,
-      notaReunionAutor: userData.nombre,
-      notaReunionEn: serverTimestamp()
+    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), {
+      notaReunion: nota, notaReunionAutor: userData.nombre, notaReunionEn: serverTimestamp()
     })
-    setSaving(false)
-    setNotaEdit(false)
+    setSaving(false); setNotaEdit(false)
   }
 
   async function guardarFin() {
     setSaving(true)
-    await updateDoc(doc(db, 'turnos', turnoId, 'incidencias', inc.id), { horaFin })
-    setSaving(false)
-    setFinEdit(false)
+    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), { horaFin })
+    setSaving(false); setFinEdit(false)
   }
 
   return (
-    <div style={{ borderBottom: '1px solid #f5f5f5' }}>
-      <div onClick={() => setOpen(!open)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', cursor: 'pointer' }}>
-        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: gradoColor[inc.grado] || '#ccc', flexShrink: 0 }} />
-        <span style={{ fontSize: '11px', color: '#aaa', minWidth: '36px' }}>{inc.horaInicio}</span>
-        <span style={{ fontSize: '12px', fontWeight: '500', color: '#333', minWidth: '80px' }}>{inc.sala === 'grande' ? 'Grande' : inc.sala === 'chica' ? 'Chica' : 'Ambas'}{inc.lineas?.length > 0 ? ' · ' + inc.lineas.join(' ') : ''}</span>
-        <span style={{ flex: 1, fontSize: '12px', color: '#666' }}>{inc.categoriaNombre}</span>
-        <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '10px', background: gradoColor[inc.grado] + '20', color: gradoColor[inc.grado], fontWeight: '500' }}>{inc.grado}</span>
-        <span style={{ fontSize: '10px', color: '#ccc' }}>{open ? '▲' : '▼'}</span>
+    <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #EFEFED', marginBottom: '10px', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 16px' }}>
+        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
+        <span style={{ fontSize: '12px', color: '#aaa', fontWeight: '500', minWidth: '38px' }}>{inc.horaInicio}</span>
+        <span style={{ fontSize: '13px', fontWeight: '600', color: '#111', minWidth: '90px' }}>
+          {inc.sala === 'grande' ? 'Grande' : inc.sala === 'chica' ? 'Chica' : 'Ambas'}
+          {inc.lineas?.length > 0 ? ' · ' + inc.lineas.join(' ') : ''}
+        </span>
+        <span style={{ flex: 1, fontSize: '13px', color: '#555' }}>{inc.categoriaNombre}</span>
+        <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: gradoBg[inc.grado], color: gradoColor[inc.grado], fontWeight: '600' }}>{inc.grado}</span>
       </div>
 
-      {open && (
-        <div style={{ padding: '12px 14px 14px 30px', background: '#fafafa', borderTop: '1px solid #f0f0f0' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-            {[
-              ['Responsable', inc.sectoresResponsables?.join(', ') || (inc.causaExterna ? 'Causa externa' : '—')],
-              ['Afectado', inc.sectoresAfectados?.join(', ') || '—'],
-              ['Inicio', inc.horaInicio],
-              ['Fin', inc.horaFin || 'pendiente'],
-            ].map(([l, v]) => (
-              <div key={l} style={{ background: '#fff', borderRadius: '8px', padding: '7px 10px', border: '1px solid #f0f0f0' }}>
-                <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '2px' }}>{l}</div>
-                <div style={{ fontSize: '12px', fontWeight: '500', color: '#333' }}>{v}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ fontSize: '12px', color: '#555', borderLeft: '3px solid #dce8f5', padding: '6px 10px', background: '#fff', borderRadius: '0 8px 8px 0', marginBottom: '10px', lineHeight: '1.5' }}>
-            {inc.descripcion}
-          </div>
-
-          {!finEdit ? (
-            inc.horaFin ? null :
-            <button onClick={() => setFinEdit(true)} style={{ fontSize: '11px', color: '#185FA5', background: 'none', border: 'none', cursor: 'pointer', padding: '0', marginBottom: '8px', textDecoration: 'underline' }}>
-              + Registrar hora de fin
-            </button>
-          ) : (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
-              <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} style={{ fontSize: '13px', borderRadius: '8px', border: '1.5px solid #e8e8e8', padding: '6px 10px', width: '120px' }} />
-              <button onClick={guardarFin} disabled={saving} style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '8px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>Guardar</button>
-              <button onClick={() => setFinEdit(false)} style={{ fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
-            </div>
-          )}
-
-          <div style={{ fontSize: '11px', fontWeight: '600', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: '6px' }}>Nota de reunión</div>
-          {!notaEdit ? (
-            <div>
-              {inc.notaReunion
-                ? <div style={{ fontSize: '12px', color: '#555', fontStyle: 'italic', background: '#fff', borderRadius: '8px', padding: '8px 10px', border: '1px solid #f0f0f0', marginBottom: '6px', lineHeight: '1.5' }}>{inc.notaReunion}</div>
-                : <div style={{ fontSize: '12px', color: '#bbb', fontStyle: 'italic', border: '1px dashed #e8e8e8', borderRadius: '8px', padding: '8px 10px', marginBottom: '6px' }}>Sin nota de reunión</div>
-              }
-              <button onClick={() => { setNota(inc.notaReunion || ''); setNotaEdit(true) }} style={{ fontSize: '11px', color: '#185FA5', background: 'none', border: 'none', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}>
-                {inc.notaReunion ? 'Editar nota' : '+ Agregar nota'}
-              </button>
-            </div>
-          ) : (
-            <div>
-              <textarea value={nota} onChange={e => setNota(e.target.value)} placeholder="Escribí la respuesta acordada en la reunión..." style={{ width: '100%', fontSize: '12px', minHeight: '60px', resize: 'vertical', borderRadius: '8px', border: '1.5px solid #185FA5', padding: '8px 10px', fontFamily: 'inherit', marginBottom: '6px' }} />
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={guardarNota} disabled={saving} style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '8px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '500' }}>Guardar nota</button>
-                <button onClick={() => setNotaEdit(false)} style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '8px', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #f0f0f0' }}>
-            <button onClick={() => onEditar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              ✏️ Editar
-            </button>
-            {userData.rol === 'owner' && (
-              <button onClick={() => onEliminar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef2f2', cursor: 'pointer', color: '#E24B4A', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                🗑 Eliminar
-              </button>
-            )}
-          </div>
+      <div style={{ padding: '0 16px 14px', borderTop: '1px solid #F5F5F3' }}>
+        <div style={{ fontSize: '13px', color: '#666', padding: '10px 0', borderBottom: '1px solid #F5F5F3', lineHeight: '1.5' }}>
+          {inc.descripcion}
         </div>
-      )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', paddingTop: '10px', marginBottom: '10px' }}>
+          {[
+            ['Responsable', inc.sectoresResponsables?.join(', ') || (inc.causaExterna ? 'Causa externa' : '—')],
+            ['Afectado', inc.sectoresAfectados?.join(', ') || '—'],
+            ['Inicio · Fin', `${inc.horaInicio} · ${inc.horaFin || 'pendiente'}`],
+          ].map(([l,v]) => (
+            <div key={l} style={{ background: '#F7F7F5', borderRadius: '8px', padding: '7px 10px' }}>
+              <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '2px' }}>{l}</div>
+              <div style={{ fontSize: '12px', fontWeight: '500', color: '#333' }}>{v}</div>
+            </div>
+          ))}
+        </div>
+
+        {!inc.horaFin && !finEdit && (
+          <button onClick={() => setFinEdit(true)} style={{ fontSize: '11px', color: '#185FA5', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 8px', textDecoration: 'underline' }}>
+            + Registrar hora de fin
+          </button>
+        )}
+        {finEdit && (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+            <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} style={{ fontSize: '13px', borderRadius: '8px', border: '1.5px solid #e8e8e8', padding: '6px 10px', width: '120px' }} />
+            <button onClick={guardarFin} disabled={saving} style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '8px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>Guardar</button>
+            <button onClick={() => setFinEdit(false)} style={{ fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
+          </div>
+        )}
+
+        {!notaEdit ? (
+          inc.notaReunion
+            ? <div style={{ background: '#FFFBF0', border: '1px solid #F5E6B0', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', color: '#7A6000', fontStyle: 'italic', lineHeight: '1.5', marginBottom: '10px', cursor: 'pointer' }} onClick={() => { setNota(inc.notaReunion); setNotaEdit(true) }}>
+                {inc.notaReunion}
+              </div>
+            : <div onClick={() => setNotaEdit(true)} style={{ border: '1.5px dashed #e8e8e8', borderRadius: '10px', padding: '9px 12px', fontSize: '12px', color: '#bbb', cursor: 'pointer', marginBottom: '10px' }}>
+                + Agregar nota de reunión...
+              </div>
+        ) : (
+          <div style={{ marginBottom: '10px' }}>
+            <textarea value={nota} onChange={e => setNota(e.target.value)} placeholder="Escribí la respuesta acordada..." style={{ width: '100%', fontSize: '13px', minHeight: '60px', resize: 'vertical', borderRadius: '10px', border: '1.5px solid #185FA5', padding: '8px 12px', fontFamily: 'inherit', marginBottom: '6px' }} />
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button onClick={guardarNota} disabled={saving} style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '8px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '500' }}>{saving ? 'Guardando...' : 'Guardar nota'}</button>
+              <button onClick={() => setNotaEdit(false)} style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '6px', paddingTop: '8px', borderTop: '1px solid #F5F5F3' }}>
+          <button onClick={() => onEditar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#555', fontWeight: '500' }}>✏️ Editar</button>
+          {userData.rol === 'owner' && (
+            <button onClick={() => onEliminar(inc)} style={{ fontSize: '11px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '500' }}>🗑 Eliminar</button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -277,61 +280,50 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
 
   async function guardar() {
     setSaving(true)
-    await updateDoc(doc(db, 'turnos', turnoId, 'incidencias', inc.id), {
+    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), {
       grado, descripcion, categoriaId: categoria, categoriaNombre,
       sectoresResponsables: responsables,
       editadoPor: userData.nombre, editadoEn: serverTimestamp()
     })
-    setSaving(false)
-    onClose()
+    setSaving(false); onClose()
   }
-
-  const filtrados = sectores.filter(s => s.toLowerCase().includes(busq.toLowerCase()))
 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '440px', maxHeight: '80vh', overflowY: 'auto', background: '#fff', borderRadius: '16px', zIndex: 21, padding: '24px', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '440px', maxHeight: '85vh', overflowY: 'auto', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '24px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ fontSize: '17px', fontWeight: '600', color: '#111' }}>Editar incidencia</div>
+          <div style={{ fontSize: '17px', fontWeight: '700', color: '#111' }}>Editar incidencia</div>
           <button onClick={onClose} style={{ width: '30px', height: '30px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', fontSize: '16px', color: '#888' }}>×</button>
         </div>
-
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '500', color: '#555', marginBottom: '8px' }}>Categoría</div>
+          <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Categoría</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
             {categorias.map(c => (
-              <button key={c.id} onClick={() => { setCategoria(c.id); setCategoriaNombre(c.nombre) }} style={{ padding: '8px', fontSize: '12px', borderRadius: '8px', border: `1.5px solid ${categoria === c.id ? '#185FA5' : '#e8e8e8'}`, background: categoria === c.id ? '#f0f6ff' : '#fafafa', color: categoria === c.id ? '#185FA5' : '#555', cursor: 'pointer', fontWeight: categoria === c.id ? '600' : '400' }}>
-                {c.nombre}
-              </button>
+              <button key={c.id} onClick={() => { setCategoria(c.id); setCategoriaNombre(c.nombre) }} style={{ padding: '8px', fontSize: '12px', borderRadius: '8px', border: `1.5px solid ${categoria===c.id?'#185FA5':'#e8e8e8'}`, background: categoria===c.id?'#f0f6ff':'#fafafa', color: categoria===c.id?'#185FA5':'#555', cursor: 'pointer', fontWeight: categoria===c.id?'600':'400' }}>{c.nombre}</button>
             ))}
           </div>
         </div>
-
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '500', color: '#555', marginBottom: '8px' }}>Grado</div>
+          <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Grado</div>
           <div style={{ display: 'flex', gap: '6px' }}>
-            {Object.entries(gradoColor).map(([g, c]) => (
-              <button key={g} onClick={() => setGrado(g)} style={{ flex: 1, padding: '8px 4px', fontSize: '11px', fontWeight: grado === g ? '600' : '400', borderRadius: '8px', border: `1.5px solid ${grado === g ? c : '#e8e8e8'}`, background: grado === g ? c + '15' : '#fafafa', color: grado === g ? c : '#888', cursor: 'pointer' }}>
-                {g}
-              </button>
+            {Object.entries(gradoColor).map(([g,c]) => (
+              <button key={g} onClick={() => setGrado(g)} style={{ flex: 1, padding: '8px 4px', fontSize: '11px', fontWeight: grado===g?'700':'400', borderRadius: '8px', border: `1.5px solid ${grado===g?c:'#e8e8e8'}`, background: grado===g?c+'20':'#fafafa', color: grado===g?c:'#888', cursor: 'pointer' }}>{g}</button>
             ))}
           </div>
         </div>
-
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '500', color: '#555', marginBottom: '8px' }}>Descripción</div>
+          <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Descripción</div>
           <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} style={{ width: '100%', fontSize: '13px', minHeight: '70px', resize: 'vertical', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '10px 12px', fontFamily: 'inherit' }} />
         </div>
-
         <div style={{ marginBottom: '20px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '500', color: '#555', marginBottom: '8px' }}>Responsables</div>
+          <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Responsables</div>
           <input value={busq} onChange={e => setBusq(e.target.value)} placeholder="Buscá un sector..." style={{ width: '100%', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '8px 12px', marginBottom: '6px' }} />
           {busq && (
             <div style={{ border: '1px solid #e8e8e8', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px', maxHeight: '120px', overflowY: 'auto' }}>
-              {filtrados.map(s => (
-                <div key={s} onClick={() => { setResponsables(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]); setBusq('') }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: responsables.includes(s) ? '#f0f6ff' : '#fff', borderBottom: '1px solid #f5f5f5' }}>
-                  {responsables.includes(s) ? '✓ ' : ''}{s}
+              {sectores.filter(s=>s.toLowerCase().includes(busq.toLowerCase())).map(s => (
+                <div key={s} onClick={() => { setResponsables(p => p.includes(s)?p.filter(x=>x!==s):[...p,s]); setBusq('') }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: responsables.includes(s)?'#f0f6ff':'#fff', borderBottom: '1px solid #f5f5f5' }}>
+                  {responsables.includes(s)?'✓ ':''}{s}
                 </div>
               ))}
             </div>
@@ -339,17 +331,14 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
             {responsables.map(r => (
               <span key={r} style={{ fontSize: '12px', padding: '3px 10px 3px 12px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', border: '1px solid #b5d4f4', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {r} <span onClick={() => setResponsables(p => p.filter(x => x !== r))} style={{ cursor: 'pointer', opacity: .6 }}>×</span>
+                {r} <span onClick={() => setResponsables(p=>p.filter(x=>x!==r))} style={{ cursor: 'pointer', opacity: .6 }}>×</span>
               </span>
             ))}
           </div>
         </div>
-
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
-          <button onClick={guardar} disabled={saving} style={{ flex: 2, padding: '10px', fontSize: '13px', fontWeight: '600', borderRadius: '10px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>
-            {saving ? 'Guardando...' : 'Guardar cambios'}
-          </button>
+          <button onClick={guardar} disabled={saving} style={{ flex: 2, padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving?'Guardando...':'Guardar cambios'}</button>
         </div>
       </div>
     </>
@@ -363,61 +352,31 @@ function ModalEliminar({ inc, turnoId, userData, onClose }) {
   async function confirmar() {
     if (!motivo.trim()) return
     setSaving(true)
-    await updateDoc(doc(db, 'turnos', turnoId, 'incidencias', inc.id), {
-      eliminado: true,
-      eliminadoPor: userData.nombre,
-      eliminadoEn: serverTimestamp(),
-      motivoEliminacion: motivo
+    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), {
+      eliminado: true, eliminadoPor: userData.nombre,
+      eliminadoEn: serverTimestamp(), motivoEliminacion: motivo
     })
-    setSaving(false)
-    onClose()
+    setSaving(false); onClose()
   }
 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '400px', background: '#fff', borderRadius: '16px', zIndex: 21, padding: '24px', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
-        <div style={{ fontSize: '17px', fontWeight: '600', color: '#111', marginBottom: '6px' }}>Eliminar incidencia</div>
-        <div style={{ fontSize: '13px', color: '#888', marginBottom: '16px' }}>Esta acción queda registrada en el log. No se puede deshacer.</div>
-
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '400px', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '24px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ fontSize: '17px', fontWeight: '700', color: '#111', marginBottom: '6px' }}>Eliminar incidencia</div>
+        <div style={{ fontSize: '13px', color: '#aaa', marginBottom: '16px' }}>Esta acción queda registrada. No se puede deshacer.</div>
         <div style={{ background: '#fef2f2', border: '1px solid #fde8e8', borderRadius: '10px', padding: '12px', marginBottom: '16px', fontSize: '13px', color: '#333' }}>
           <strong>{inc.categoriaNombre}</strong> · {inc.horaInicio} · {inc.grado}
         </div>
-
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '500', color: '#555', marginBottom: '6px' }}>Motivo de eliminación <span style={{ color: '#E24B4A' }}>*</span></div>
-          <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="¿Por qué se elimina esta incidencia?" style={{ width: '100%', fontSize: '13px', minHeight: '60px', resize: 'vertical', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '8px 12px', fontFamily: 'inherit' }} />
+          <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '6px' }}>Motivo <span style={{ color: '#E24B4A' }}>*</span></div>
+          <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="¿Por qué se elimina?" style={{ width: '100%', fontSize: '13px', minHeight: '60px', resize: 'vertical', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '8px 12px', fontFamily: 'inherit' }} />
         </div>
-
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
-          <button onClick={confirmar} disabled={saving || !motivo.trim()} style={{ flex: 1, padding: '10px', fontSize: '13px', fontWeight: '600', borderRadius: '10px', background: motivo.trim() ? '#E24B4A' : '#f5a5a5', color: '#fff', border: 'none', cursor: motivo.trim() ? 'pointer' : 'not-allowed' }}>
-            {saving ? 'Eliminando...' : 'Confirmar'}
-          </button>
+          <button onClick={confirmar} disabled={saving||!motivo.trim()} style={{ flex: 1, padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: motivo.trim()?'#E24B4A':'#f5a5a5', color: '#fff', border: 'none', cursor: motivo.trim()?'pointer':'not-allowed' }}>{saving?'Eliminando...':'Confirmar'}</button>
         </div>
       </div>
     </>
-  )
-}
-
-function SemaforoSectores({ incidencias, sectores }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-      {sectores.map(s => {
-        const incs = incidencias.filter(i => i.sectoresResponsables?.includes(s))
-        const critica = incs.some(i => i.grado === 'critico')
-        const moderada = incs.some(i => i.grado === 'moderado')
-        const color = critica ? '#E24B4A' : moderada ? '#BA7517' : '#1D9E75'
-        return (
-          <div key={s} style={{ background: '#fff', border: '1px solid #eee', borderRadius: '10px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, flexShrink: 0 }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '12px', fontWeight: '500', color: '#333' }}>{s}</div>
-              <div style={{ fontSize: '10px', color: '#aaa' }}>{incs.length > 0 ? `${incs.length} inc.` : 'sin novedades'}</div>
-            </div>
-          </div>
-        )
-      })}
-    </div>
   )
 }
