@@ -14,7 +14,7 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
   const [step, setStep] = useState(1)
   const [sectores, setSectores] = useState([])
   const [categorias, setCategorias] = useState([])
-  const [sala, setSala] = useState('grande')
+  const [sala, setSala] = useState('')
   const [lineas, setLineas] = useState([])
   const [afectados, setAfectados] = useState([])
   const [responsables, setResponsables] = useState([])
@@ -31,8 +31,6 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
   const [horaFin, setHoraFin] = useState('')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
-  const [busqAfect, setBusqAfect] = useState('')
-  const [busqResp, setBusqResp] = useState('')
   const [errores, setErrores] = useState({})
 
   useEffect(() => {
@@ -42,8 +40,7 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
     getDoc(doc(db, 'config', 'categorias')).then(snap => {
       if (snap.exists()) setCategorias(Object.entries(snap.data()).map(([id, n]) => ({ id, nombre: n })).sort((a, b) => a.nombre.localeCompare(b.nombre)))
     })
-    const horaFranjaInicio = franja.split('-')[0]
-    setHoraInicio(horaFranjaInicio)
+    setHoraInicio(franja.split('-')[0])
   }, [franja])
 
   function toggleAfect(s) { setAfectados(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]) }
@@ -61,22 +58,27 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
     setNuevaCat(''); setMostrarNuevaCat(false)
   }
 
-  function validarPaso2() {
+  function validar() {
     const e = {}
-    if (!categoria) e.categoria = 'Seleccioná una categoría'
-    if (!grado) e.grado = 'Seleccioná el grado'
-    if (!descripcion.trim()) e.descripcion = 'Describí qué pasó'
+    if (step === 1) {
+      if (!categoria) e.categoria = 'Seleccioná una categoría'
+      if (!grado) e.grado = 'Seleccioná el grado'
+      if (!descripcion.trim()) e.descripcion = 'Describí qué pasó'
+    }
+    if (step === 3) {
+      if (!horaInicio) e.horaInicio = 'Ingresá la hora de inicio'
+    }
     setErrores(e)
     return Object.keys(e).length === 0
   }
 
   function siguiente() {
-    if (step === 2 && !validarPaso2()) return
+    if (!validar()) return
     setStep(s => s + 1)
   }
 
   async function guardar() {
-    if (!horaInicio) { setErrores({ horaInicio: 'Ingresá la hora de inicio' }); return }
+    if (!validar()) return
     setSaving(true)
     try {
       await addDoc(collection(db, 'turnos', turnoId, 'incidencias'), {
@@ -94,13 +96,11 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
   }
 
   function reset() {
-    setDone(false); setStep(1); setSala('grande'); setLineas([])
+    setDone(false); setStep(1); setSala(''); setLineas([])
     setAfectados([]); setResponsables([]); setCausaExterna(false)
     setCategoria(''); setCategoriaNombre(''); setGrado('')
     setDescripcion(''); setEtiquetas([]); setErrores({})
-    const horaFranjaInicio = franja.split('-')[0]
-    setHoraInicio(horaFranjaInicio)
-    setHoraFin('')
+    setHoraInicio(franja.split('-')[0]); setHoraFin('')
   }
 
   const fieldLabel = (t, req, opt) => (
@@ -116,20 +116,30 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
     <div style={{ fontSize: '11px', fontWeight: '600', color: '#999', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>{t}</div>
   )
 
-  function BuscadorSector({ busq, setBusq, seleccionados, toggle, placeholder }) {
-    const filtrados = sectores.filter(s => s.toLowerCase().includes(busq.toLowerCase()))
+  function BuscadorSector({ seleccionados, toggle, placeholder }) {
+    const [busq, setBusq] = useState('')
+    const filtrados = busq.length > 0 ? sectores.filter(s => s.toLowerCase().includes(busq.toLowerCase())) : []
     return (
       <div>
         <div style={{ position: 'relative' }}>
-          <input value={busq} onChange={e => setBusq(e.target.value)} placeholder={placeholder}
-            style={{ width: '100%', fontSize: '13px', padding: '9px 32px 9px 12px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fafafa' }} />
-          {busq && <span onClick={() => setBusq('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#bbb', fontSize: '16px' }}>×</span>}
+          <input
+            value={busq}
+            onChange={e => setBusq(e.target.value)}
+            placeholder={placeholder}
+            style={{ width: '100%', fontSize: '13px', padding: '9px 32px 9px 12px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fafafa' }}
+          />
+          {busq && (
+            <span onClick={() => setBusq('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#bbb', fontSize: '16px' }}>×</span>
+          )}
         </div>
-        {busq && filtrados.length > 0 && (
-          <div style={{ border: '1.5px solid #e8e8e8', borderRadius: '10px', overflow: 'hidden', marginTop: '6px', maxHeight: '160px', overflowY: 'auto', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+        {busq.length > 0 && filtrados.length > 0 && (
+          <div style={{ border: '1.5px solid #e8e8e8', borderRadius: '10px', overflow: 'hidden', marginTop: '6px', maxHeight: '180px', overflowY: 'auto', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
             {filtrados.map(s => (
-              <div key={s} onClick={() => { toggle(s); setBusq('') }}
-                style={{ padding: '9px 14px', fontSize: '13px', cursor: 'pointer', background: seleccionados.includes(s) ? '#f0f6ff' : '#fff', borderBottom: '1px solid #f5f5f5', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div
+                key={s}
+                onClick={() => { toggle(s) }}
+                style={{ padding: '9px 14px', fontSize: '13px', cursor: 'pointer', background: seleccionados.includes(s) ? '#f0f6ff' : '#fff', borderBottom: '1px solid #f5f5f5', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
                 <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: `2px solid ${seleccionados.includes(s) ? '#185FA5' : '#ddd'}`, background: seleccionados.includes(s) ? '#185FA5' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {seleccionados.includes(s) && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fff' }} />}
                 </div>
@@ -137,6 +147,9 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
               </div>
             ))}
           </div>
+        )}
+        {busq.length > 0 && filtrados.length === 0 && (
+          <div style={{ fontSize: '12px', color: '#aaa', padding: '8px 12px', marginTop: '4px' }}>Sin resultados</div>
         )}
         {seleccionados.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
@@ -150,6 +163,8 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
       </div>
     )
   }
+
+  const stepLabels = ['¿Qué pasó?', '¿Quién?', '¿Dónde y cuándo?']
 
   return (
     <>
@@ -167,15 +182,15 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
 
           {!done && (
             <div style={{ display: 'flex', alignItems: 'center', marginTop: '16px' }}>
-              {['¿Dónde?', '¿Qué pasó?', '¿Cuánto?'].map((lbl, i) => (
+              {stepLabels.map((lbl, i) => (
                 <div key={i} style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
                     <div style={{ width: '28px', height: '28px', borderRadius: '50%', margin: '0 auto 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600', background: step === i+1 ? '#185FA5' : step > i+1 ? '#1D9E75' : '#f0f0f0', color: step >= i+1 ? '#fff' : '#aaa' }}>
                       {step > i+1 ? '✓' : i+1}
                     </div>
-                    <div style={{ fontSize: '10px', fontWeight: step === i+1 ? '600' : '400', color: step === i+1 ? '#185FA5' : step > i+1 ? '#1D9E75' : '#bbb' }}>{lbl}</div>
+                    <div style={{ fontSize: '10px', fontWeight: step === i+1 ? '600' : '400', color: step === i+1 ? '#185FA5' : step > i+1 ? '#1D9E75' : '#bbb', textAlign: 'center' }}>{lbl}</div>
                   </div>
-                  {i < 2 && <div style={{ height: '1.5px', width: '24px', background: step > i+1 ? '#1D9E75' : '#e8e8e8', marginBottom: '14px', flexShrink: 0 }} />}
+                  {i < 2 && <div style={{ height: '1.5px', width: '20px', background: step > i+1 ? '#1D9E75' : '#e8e8e8', marginBottom: '14px', flexShrink: 0 }} />}
                 </div>
               ))}
             </div>
@@ -187,8 +202,8 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
             <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
               <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#e8f5ee', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '24px' }}>✓</div>
               <div style={{ fontSize: '17px', fontWeight: '600', color: '#111', marginBottom: '6px' }}>¡Incidencia registrada!</div>
-              <div style={{ fontSize: '13px', color: '#888', marginBottom: '8px' }}>{categoriaNombre}</div>
-              <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '28px' }}>{sala === 'grande' ? 'Sala grande' : sala === 'chica' ? 'Sala chica' : 'Ambas salas'}{lineas.length > 0 ? ' · ' + lineas.join(', ') : ''}</div>
+              <div style={{ fontSize: '13px', color: '#888', marginBottom: '8px' }}>{categoriaNombre} · {grado}</div>
+              <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '28px' }}>Franja {franja.replace('-', ' — ')}</div>
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                 <button onClick={reset} style={{ fontSize: '13px', padding: '9px 18px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', fontWeight: '500' }}>+ Nueva</button>
                 <button onClick={onClose} style={{ fontSize: '13px', padding: '9px 18px', borderRadius: '10px', border: 'none', background: '#185FA5', color: '#fff', cursor: 'pointer', fontWeight: '500' }}>Volver al tablero</button>
@@ -196,46 +211,6 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
             </div>
 
           ) : step === 1 ? (
-            <div>
-              <div style={{ marginBottom: '20px' }}>
-                {fieldLabel('Sala', true)}
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {['grande', 'chica', 'ambas'].map(s => (
-                    <button key={s} onClick={() => setSala(s)} style={{ flex: 1, padding: '10px 0', fontSize: '13px', fontWeight: sala === s ? '600' : '400', borderRadius: '10px', border: `1.5px solid ${sala === s ? '#185FA5' : '#e8e8e8'}`, background: sala === s ? '#185FA5' : '#fafafa', color: sala === s ? '#fff' : '#666', cursor: 'pointer' }}>
-                      {s === 'grande' ? 'Grande' : s === 'chica' ? 'Chica' : 'Ambas'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {sala !== 'chica' && (
-                <div style={{ marginBottom: '20px' }}>
-                  {fieldLabel('Líneas afectadas', false, true)}
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {['L2', 'L3', 'L4', 'L5'].map(l => (
-                      <button key={l} onClick={() => toggleLinea(l)} style={{ padding: '6px 16px', fontSize: '13px', fontWeight: '500', borderRadius: '20px', border: `1.5px solid ${lineas.includes(l) ? '#BA7517' : '#e8e8e8'}`, background: lineas.includes(l) ? '#fff8ee' : '#fafafa', color: lineas.includes(l) ? '#BA7517' : '#888', cursor: 'pointer' }}>{l}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ background: '#fafafa', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-                {sectionTitle('Sectores afectados')}
-                {fieldLabel('¿Dónde impactó?', false, true)}
-                <BuscadorSector busq={busqAfect} setBusq={setBusqAfect} seleccionados={afectados} toggle={toggleAfect} placeholder="Buscá un sector..." />
-              </div>
-
-              <div style={{ background: '#fafafa', borderRadius: '12px', padding: '16px' }}>
-                {sectionTitle('Sector responsable')}
-                {fieldLabel('¿Quién resuelve?', false, true)}
-                <BuscadorSector busq={busqResp} setBusq={setBusqResp} seleccionados={responsables} toggle={toggleResp} placeholder="Buscá un sector..." />
-                <button onClick={() => setCausaExterna(!causaExterna)} style={{ marginTop: '10px', fontSize: '12px', padding: '6px 14px', borderRadius: '20px', border: `1.5px ${causaExterna ? 'solid' : 'dashed'} ${causaExterna ? '#185FA5' : '#ddd'}`, background: causaExterna ? '#f0f6ff' : '#fff', color: causaExterna ? '#185FA5' : '#aaa', cursor: 'pointer' }}>
-                  🌐 Causa externa
-                </button>
-              </div>
-            </div>
-
-          ) : step === 2 ? (
             <div>
               <div style={{ marginBottom: '20px' }}>
                 {fieldLabel('Categoría', true)}
@@ -253,8 +228,9 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
                     + Agregar categoría nueva
                   </button>
                 ) : (
-                  <div style={{ background: '#f5f8ff', borderRadius: '12px', padding: '12px', border: '1.5px solid #dce8f5' }}>
-                    <input value={nuevaCat} onChange={e => setNuevaCat(e.target.value)} placeholder="Nombre de la categoría..." style={{ width: '100%', fontSize: '13px', marginBottom: '8px', borderRadius: '8px', border: '1.5px solid #e8e8e8', padding: '8px 12px' }} />
+                  <div style={{ background: '#f5f8ff', borderRadius: '12px', padding: '12px', border: '1.5px solid #dce8f5', marginTop: '8px' }}>
+                    <input value={nuevaCat} onChange={e => setNuevaCat(e.target.value)} placeholder="Nombre de la categoría..."
+                      style={{ width: '100%', fontSize: '13px', marginBottom: '8px', borderRadius: '8px', border: '1.5px solid #e8e8e8', padding: '8px 12px' }} />
                     <div style={{ display: 'flex', gap: '6px' }}>
                       <button onClick={agregarCategoria} style={{ flex: 1, fontSize: '12px', padding: '7px', borderRadius: '8px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '500' }}>Agregar y usar</button>
                       <button onClick={() => setMostrarNuevaCat(false)} style={{ fontSize: '12px', padding: '7px 12px', borderRadius: '8px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
@@ -287,7 +263,7 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
 
               <div>
                 {fieldLabel('Etiquetas', false, true)}
-                <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '8px' }}>Palabras clave para búsqueda · ej: "cinta huesos", "WPA21"</div>
+                <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '8px' }}>Palabras clave · ej: "cinta huesos", "WPA21"</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="Escribí y presioná Enter..."
                     style={{ flex: 1, fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '8px 12px', background: '#fafafa' }} />
@@ -305,8 +281,47 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
               </div>
             </div>
 
+          ) : step === 2 ? (
+            <div>
+              <div style={{ background: '#fafafa', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
+                {sectionTitle('Sector responsable')}
+                {fieldLabel('¿Quién resuelve?', false, true)}
+                <BuscadorSector seleccionados={responsables} toggle={toggleResp} placeholder="Buscá un sector..." />
+                <button onClick={() => setCausaExterna(!causaExterna)} style={{ marginTop: '12px', fontSize: '12px', padding: '6px 14px', borderRadius: '20px', border: `1.5px ${causaExterna ? 'solid' : 'dashed'} ${causaExterna ? '#185FA5' : '#ddd'}`, background: causaExterna ? '#f0f6ff' : '#fff', color: causaExterna ? '#185FA5' : '#aaa', cursor: 'pointer' }}>
+                  🌐 Causa externa
+                </button>
+              </div>
+            </div>
+
           ) : (
             <div>
+              <div style={{ marginBottom: '20px' }}>
+                {fieldLabel('Sala', false, true)}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                  {['grande', 'chica', 'ambas'].map(s => (
+                    <button key={s} onClick={() => setSala(sala === s ? '' : s)} style={{ flex: 1, padding: '10px 0', fontSize: '13px', fontWeight: sala === s ? '600' : '400', borderRadius: '10px', border: `1.5px solid ${sala === s ? '#185FA5' : '#e8e8e8'}`, background: sala === s ? '#185FA5' : '#fafafa', color: sala === s ? '#fff' : '#666', cursor: 'pointer' }}>
+                      {s === 'grande' ? 'Grande' : s === 'chica' ? 'Chica' : 'Ambas'}
+                    </button>
+                  ))}
+                </div>
+                {sala !== 'chica' && sala !== '' && (
+                  <div style={{ marginBottom: '12px' }}>
+                    {fieldLabel('Líneas', false, true)}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {['L2', 'L3', 'L4', 'L5'].map(l => (
+                        <button key={l} onClick={() => toggleLinea(l)} style={{ padding: '6px 16px', fontSize: '13px', fontWeight: '500', borderRadius: '20px', border: `1.5px solid ${lineas.includes(l) ? '#BA7517' : '#e8e8e8'}`, background: lineas.includes(l) ? '#fff8ee' : '#fafafa', color: lineas.includes(l) ? '#BA7517' : '#888', cursor: 'pointer' }}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ background: '#fafafa', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
+                {sectionTitle('Sectores afectados')}
+                {fieldLabel('¿Dónde impactó?', false, true)}
+                <BuscadorSector seleccionados={afectados} toggle={toggleAfect} placeholder="Buscá un sector..." />
+              </div>
+
               <div style={{ marginBottom: '20px' }}>
                 {fieldLabel('Horario', true)}
                 <div style={{ display: 'flex', gap: '12px' }}>
@@ -329,10 +344,10 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
                 <div style={{ fontSize: '11px', fontWeight: '600', color: '#999', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '12px' }}>Resumen</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   {[
-                    ['Sala', `${sala === 'grande' ? 'Grande' : sala === 'chica' ? 'Chica' : 'Ambas'}${lineas.length > 0 ? ' · ' + lineas.join(' ') : ''}`],
                     ['Categoría', categoriaNombre],
                     ['Grado', grado, gradoColor[grado]],
                     ['Responsable', responsables.length > 0 ? responsables.join(', ') : causaExterna ? 'Causa externa' : '—'],
+                    ['Sala', sala ? (sala === 'grande' ? 'Grande' : sala === 'chica' ? 'Chica' : 'Ambas') + (lineas.length > 0 ? ' · ' + lineas.join(' ') : '') : '—'],
                   ].map(([l, v, c]) => (
                     <div key={l}>
                       <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '2px' }}>{l}</div>
