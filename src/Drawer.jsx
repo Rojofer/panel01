@@ -297,11 +297,11 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
                     </button>
                   ))}
                 </div>
-                {(sala === 'grande' || sala === 'ambas') && (
+                {sala && (
                   <div style={{ marginBottom: '12px' }}>
                     {fieldLabel('Líneas', false, true)}
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {['L2', 'L3', 'L4', 'L5'].map(l => (
+                      {(sala === 'grande' || sala === 'ambas' ? ['L2', 'L3', 'L4'] : ['L5']).map(l => (
                         <button key={l} onClick={() => toggleLinea(l)} style={{ padding: '6px 16px', fontSize: '13px', fontWeight: '500', borderRadius: '20px', border: `1.5px solid ${lineas.includes(l) ? '#BA7517' : '#e8e8e8'}`, background: lineas.includes(l) ? '#fff8ee' : '#fafafa', color: lineas.includes(l) ? '#BA7517' : '#888', cursor: 'pointer' }}>{l}</button>
                       ))}
                     </div>
