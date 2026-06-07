@@ -605,7 +605,7 @@ function ModalHistorial({ onClose, turnoIdActual }) {
                           <span style={{ padding:'2px 7px', borderRadius:'6px', background: l.accion==='eliminar_incidencia'?'#fef2f2':'#f0f6ff', color: l.accion==='eliminar_incidencia'?'#E24B4A':'#185FA5', fontWeight:'600', flexShrink:0, fontSize:'10px' }}>
                             {l.accion === 'eliminar_incidencia' ? 'Eliminó' : 'Editó'}
                           </span>
-                          <span style={{ flex:1, color:'#555' }}>{l.datos?.categoria || l.datos?.descripcionAnterior?.slice(0,40)}</span>
+                          <span style={{ flex:1, color:'#555' }}>{l.datos?.categoria || l.datos?.descripcionAnterior?.slice(0,40)}{l.datos?.motivo ? ` · "${l.datos.motivo}"` : ''}</span>
                           <span style={{ color:'#aaa', flexShrink:0 }}>{l.usuarioNombre}</span>
                         </div>
                       ))}
