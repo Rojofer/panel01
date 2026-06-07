@@ -25,6 +25,18 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [modalIniciarTurno, setModalIniciarTurno] = useState(false)
   const [modalHistorial, setModalHistorial] = useState(false)
   const [modalConfig, setModalConfig] = useState(false)
+  const [produccion, setProduccion] = useState({})
+  const [modalProduccion, setModalProduccion] = useState(null)
+
+  useEffect(() => {
+    if (!turnoId) return
+    getDocs(collection(db,'turnos',turnoId,'produccion')).then(snap => {
+      const data = {}
+      snap.docs.forEach(d => { data[d.id] = d.data() })
+      setProduccion(data)
+    })
+  }, [turnoId])
+  
   const [horaActual, setHoraActual] = useState('')
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
@@ -206,6 +218,19 @@ export default function Tablero({ user, userData, onVerInforme }) {
               {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
                 <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id === ultimaIncId} />
               ))}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'6px 2px', marginBottom:'4px' }}>
+                {produccion[franja] ? (
+                  <div style={{ display:'flex', gap:'10px', fontSize:'12px', color:'#555' }}>
+                    <span>🏭 Grande: <strong>{produccion[franja].grande ?? '—'}</strong> ctos</span>
+                    <span>🏠 Chica: <strong>{produccion[franja].chica ?? '—'}</strong> ctos</span>
+                  </div>
+                ) : (
+                  <span style={{ fontSize:'11px', color:'#ccc' }}>Sin producción cargada</span>
+                )}
+                <button onClick={() => setModalProduccion(franja)} style={{ fontSize:'11px', padding:'3px 10px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555', marginLeft:'auto' }}>
+                  {produccion[franja] ? '✏️ Editar' : '+ Cargar producción'}
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -229,6 +254,19 @@ export default function Tablero({ user, userData, onVerInforme }) {
       {editando && <ModalEditar inc={editando} turnoId={turnoId} categorias={categorias} sectores={sectores} userData={userData} onClose={() => setEditando(null)} />}
       {eliminando && userData.rol === 'owner' && <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />}
       {modalConfig && <Configuracion onClose={() => setModalConfig(false)} />}
+      {modalProduccion && (
+        <ModalProduccion
+          franja={modalProduccion}
+          inicial={produccion[modalProduccion]}
+          onGuardar={async (grande, chica) => {
+            const franjaId = modalProduccion.replace(':','').replace(':','').replace('-','_')
+            await setDoc(doc(db,'turnos',turnoId,'produccion',franjaId), { franja: modalProduccion, grande, chica, cargadoEn: serverTimestamp() })
+            setProduccion(p => ({ ...p, [modalProduccion]: { grande, chica } }))
+            setModalProduccion(null)
+          }}
+          onClose={() => setModalProduccion(null)}
+        />
+      )}
       {modalHistorial && <ModalHistorial onClose={() => setModalHistorial(false)} turnoIdActual={turnoId} />}
       {modalIniciarTurno && (
         <ModalIniciarTurno
@@ -616,6 +654,42 @@ function ModalHistorial({ onClose, turnoIdActual }) {
             </div>
           )
         })}
+      </div>
+    </>
+  )
+}
+
+function ModalProduccion({ franja, inicial, onGuardar, onClose }) {
+  const [grande, setGrande] = useState(inicial?.grande ?? '')
+  const [chica, setChica] = useState(inicial?.chica ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function guardar() {
+    setSaving(true)
+    await onGuardar(grande === '' ? null : Number(grande), chica === '' ? null : Number(chica))
+    setSaving(false)
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.3)', zIndex:20 }} />
+      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:'340px', background:'#fff', borderRadius:'18px', zIndex:21, padding:'24px', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ fontSize:'17px', fontWeight:'700', color:'#111', marginBottom:'4px' }}>Producción</div>
+        <div style={{ fontSize:'13px', color:'#aaa', marginBottom:'20px' }}>Franja {franja.replace('-',' — ')}</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'20px' }}>
+          <div>
+            <div style={{ fontSize:'12px', fontWeight:'600', color:'#555', marginBottom:'6px' }}>Sala grande (ctos)</div>
+            <input type="number" value={grande} onChange={e => setGrande(e.target.value)} placeholder="0" style={{ width:'100%', fontSize:'16px', borderRadius:'10px', border:'1.5px solid #e8e8e8', padding:'10px 12px', textAlign:'center' }} />
+          </div>
+          <div>
+            <div style={{ fontSize:'12px', fontWeight:'600', color:'#555', marginBottom:'6px' }}>Sala chica (ctos)</div>
+            <input type="number" value={chica} onChange={e => setChica(e.target.value)} placeholder="0" style={{ width:'100%', fontSize:'16px', borderRadius:'10px', border:'1.5px solid #e8e8e8', padding:'10px 12px', textAlign:'center' }} />
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:'8px' }}>
+          <button onClick={onClose} style={{ flex:1, padding:'10px', fontSize:'13px', borderRadius:'10px', border:'1.5px solid #e8e8e8', background:'#fff', cursor:'pointer', color:'#888', fontWeight:'500' }}>Cancelar</button>
+          <button onClick={guardar} disabled={saving} style={{ flex:2, padding:'10px', fontSize:'13px', fontWeight:'700', borderRadius:'10px', background:'#185FA5', color:'#fff', border:'none', cursor:'pointer' }}>{saving?'Guardando...':'Guardar'}</button>
+        </div>
       </div>
     </>
   )
