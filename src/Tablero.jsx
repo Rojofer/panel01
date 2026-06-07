@@ -204,6 +204,31 @@ export default function Tablero({ user, userData, onVerInforme }) {
             </div>
           )}
 
+          <div style={{ background:'#fff', borderRadius:'14px', border:'1px solid #EFEFED', marginBottom:'16px', overflow:'hidden' }}>
+            <div style={{ padding:'10px 16px', borderBottom:'1px solid #EFEFED', fontSize:'12px', fontWeight:'600', color:'#555' }}>Producción por franja</div>
+            {franjas.map(franja => {
+              const prod = produccion[franja]
+              const objG = config?.objetivoGrande || 350
+              const objC = config?.objetivoChica || 100
+              return (
+                <div key={franja} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'8px 16px', borderBottom:'1px solid #F5F5F3' }}>
+                  <span style={{ fontSize:'12px', fontWeight:'600', color:'#aaa', minWidth:'100px' }}>{franja.replace('-',' — ')}</span>
+                  <div style={{ display:'flex', gap:'16px', flex:1 }}>
+                    <span style={{ fontSize:'12px', color: prod?.grande != null ? (prod.grande >= objG ? '#1D9E75' : '#E24B4A') : '#ccc' }}>
+                      Grande: <strong>{prod?.grande ?? '—'}</strong>{prod?.grande != null && <span style={{ fontSize:'10px', marginLeft:'4px', color:'#aaa' }}>obj {objG}</span>}
+                    </span>
+                    <span style={{ fontSize:'12px', color: prod?.chica != null ? (prod.chica >= objC ? '#1D9E75' : '#E24B4A') : '#ccc' }}>
+                      Chica: <strong>{prod?.chica ?? '—'}</strong>{prod?.chica != null && <span style={{ fontSize:'10px', marginLeft:'4px', color:'#aaa' }}>obj {objC}</span>}
+                    </span>
+                  </div>
+                  <button onClick={() => setModalProduccion(franja)} style={{ fontSize:'11px', padding:'3px 10px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555', flexShrink:0 }}>
+                    {prod ? '✏️' : '+'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+          
           {franjasFiltradas.length === 0 && (
             <div style={{ textAlign: 'center', padding: '3rem', color: '#ccc', fontSize: '14px' }}>
               {hayFiltros ? 'Sin incidencias con los filtros aplicados' : 'Sin incidencias registradas en el turno'}
@@ -218,23 +243,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
               {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
                 <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id === ultimaIncId} />
               ))}
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'6px 2px', marginBottom:'4px' }}>
-                {produccion[franja] ? (
-                  <div style={{ display:'flex', gap:'10px', fontSize:'12px', color:'#555' }}>
-                    <span>🏭 Grande: <strong>{produccion[franja].grande ?? '—'}</strong> ctos</span>
-                    <span>🏠 Chica: <strong>{produccion[franja].chica ?? '—'}</strong> ctos</span>
-                  </div>
-                ) : (
-                  <span style={{ fontSize:'11px', color:'#ccc' }}>Sin producción cargada</span>
-                )}
-                <button onClick={() => setModalProduccion(franja)} style={{ fontSize:'11px', padding:'3px 10px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555', marginLeft:'auto' }}>
-                  {produccion[franja] ? '✏️ Editar' : '+ Cargar producción'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
+              
         <div>
           {sectoresConInc.length > 0 && (
             <>
