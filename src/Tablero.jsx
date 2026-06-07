@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { db, auth } from './firebase'
@@ -16,6 +16,8 @@ export default function Tablero({ user, userData }) {
   const [eliminando, setEliminando] = useState(null)
   const [categorias, setCategorias] = useState([])
   const [sectores, setSectores] = useState([])
+  const [sectorFiltro, setSectorFiltro] = useState(null)
+  const [sectorDetalle, setSectorDetalle] = useState(null)
 
   useEffect(() => {
     const hoy = new Date()
@@ -46,11 +48,23 @@ export default function Tablero({ user, userData }) {
   const ultimaIncId = activas.length > 0 ? activas[activas.length-1].id : null
   const sectoresConInc = sectores.filter(s => activas.some(i => i.sectoresResponsables?.includes(s)))
 
+  const incsFiltradas = sectorFiltro
+    ? activas.filter(i => i.sectoresResponsables?.includes(sectorFiltro))
+    : activas
+
+  const franjasFiltradas = franjas.filter(f => incsFiltradas.filter(i=>i.franja===f).length > 0)
+
   return (
     <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', background: '#F7F7F5', minHeight: '100vh' }}>
       <div style={{ background: '#fff', borderBottom: '1px solid #EFEFED', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px', position: 'sticky', top: 0, zIndex: 5 }}>
         <span style={{ fontSize: '16px', fontWeight: '700', color: '#111' }}>Panel de Control</span>
         <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#EDFBF4', color: '#1D9E75', fontWeight: '600' }}>Turno activo</span>
+        {sectorFiltro && (
+          <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            Filtro: {sectorFiltro}
+            <span onClick={() => setSectorFiltro(null)} style={{ cursor: 'pointer', opacity: .6, fontSize: '14px' }}>×</span>
+          </span>
+        )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
           <span style={{ fontSize: '12px', color: '#aaa' }}>05:00 — 14:00</span>
           <span style={{ fontSize: '13px', fontWeight: '600', color: '#333' }}>Obj: {config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'} ctos</span>
@@ -58,11 +72,11 @@ export default function Tablero({ user, userData }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 280px' : '1fr', gap: '16px', padding: '16px 24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '16px', padding: '16px 24px' }}>
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '16px' }}>
             {[
-              ['Incidencias', activas.length, activas.filter(i=>i.grado==='critico').length + ' críticas', '#E24B4A'],
+              ['Incidencias', sectorFiltro ? incsFiltradas.length : activas.length, (sectorFiltro ? incsFiltradas : activas).filter(i=>i.grado==='critico').length + ' críticas', '#E24B4A'],
               ['Tiempo perdido', '— min', 'en paradas', '#BA7517'],
               ['Cuartos producidos', '—', 'de ' + (config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'), '#1D9E75'],
             ].map(([l,v,s,c]) => (
@@ -74,8 +88,7 @@ export default function Tablero({ user, userData }) {
             ))}
           </div>
 
-          <div
-            onClick={() => setDrawerOpen('elegir')}
+          <div onClick={() => setDrawerOpen('elegir')}
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px dashed #d0d0d0', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor='#185FA5'; e.currentTarget.style.background='#f8fbff' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor='#d0d0d0'; e.currentTarget.style.background='#fff' }}>
@@ -83,59 +96,47 @@ export default function Tablero({ user, userData }) {
             <span style={{ fontSize: '14px', fontWeight: '600', color: '#185FA5' }}>Registrar incidencia</span>
           </div>
 
-          {franjasConInc.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#ccc', fontSize: '14px' }}>Sin incidencias registradas en el turno</div>
+          {franjasFiltradas.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#ccc', fontSize: '14px' }}>
+              {sectorFiltro ? `Sin incidencias de ${sectorFiltro} en el turno` : 'Sin incidencias registradas en el turno'}
+            </div>
           )}
 
-          {franjasConInc.map(franja => (
+          {franjasFiltradas.map(franja => (
             <div key={franja}>
               <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px', paddingLeft: '2px' }}>
                 {franja.replace('-', ' — ')}
               </div>
-              {incsPorFranja[franja].map(inc => (
-                <IncCard
-                  key={inc.id}
-                  inc={inc}
-                  turnoId={turnoId}
-                  userData={userData}
-                  onEditar={setEditando}
-                  onEliminar={setEliminando}
-                  defaultOpen={inc.id === ultimaIncId}
-                />
+              {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
+                <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id === ultimaIncId} />
               ))}
             </div>
           ))}
         </div>
 
-        {sectoresConInc.length > 0 && (
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Con incidencias</div>
-            {sectoresConInc.map(s => {
-              const incs = activas.filter(i => i.sectoresResponsables?.includes(s))
-              const critica = incs.some(i => i.grado === 'critico')
-              const moderada = incs.some(i => i.grado === 'moderado')
-              const color = critica ? '#E24B4A' : moderada ? '#BA7517' : '#1D9E75'
-              return (
-                <div key={s} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #EFEFED', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#222' }}>{s}</div>
-                    <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px' }}>{incs.length} inc. · {incs.filter(i=>i.grado==='critico').length > 0 ? `${incs.filter(i=>i.grado==='critico').length} crítica` : 'sin críticas'}</div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        <div>
+          {sectoresConInc.length > 0 && (
+            <>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>
+                {sectorFiltro ? 'Sectores · click para quitar filtro' : 'Sectores · click para filtrar'}
+              </div>
+              {sectoresConInc.map(s => (
+                <SectorCard
+                  key={s}
+                  sector={s}
+                  incs={activas.filter(i => i.sectoresResponsables?.includes(s))}
+                  seleccionado={sectorFiltro === s}
+                  onClick={() => setSectorFiltro(sectorFiltro === s ? null : s)}
+                  onDobleClick={() => setSectorDetalle(s)}
+                />
+              ))}
+            </>
+          )}
+        </div>
       </div>
 
       {drawerOpen === 'elegir' && (
-        <ModalFranja
-          franjas={franjas}
-          incsPorFranja={incsPorFranja}
-          onSelect={f => setDrawerOpen(f)}
-          onClose={() => setDrawerOpen(false)}
-        />
+        <ModalFranja franjas={franjas} incsPorFranja={incsPorFranja} onSelect={f => setDrawerOpen(f)} onClose={() => setDrawerOpen(false)} />
       )}
       {drawerOpen && drawerOpen !== 'elegir' && (
         <Drawer franja={drawerOpen} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} franjas={franjas} />
@@ -146,7 +147,110 @@ export default function Tablero({ user, userData }) {
       {eliminando && userData.rol === 'owner' && (
         <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />
       )}
+      {sectorDetalle && (
+        <ModalSector sector={sectorDetalle} incs={activas.filter(i => i.sectoresResponsables?.includes(sectorDetalle))} onClose={() => setSectorDetalle(null)} />
+      )}
     </div>
+  )
+}
+
+function SectorCard({ sector, incs, seleccionado, onClick, onDobleClick }) {
+  const clickTimer = useRef(null)
+  const critica = incs.some(i => i.grado === 'critico')
+  const moderada = incs.some(i => i.grado === 'moderado')
+  const color = critica ? '#E24B4A' : moderada ? '#BA7517' : '#1D9E75'
+
+  function handleClick() {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+      onDobleClick()
+    } else {
+      clickTimer.current = setTimeout(() => {
+        clickTimer.current = null
+        onClick()
+      }, 250)
+    }
+  }
+
+  return (
+    <div onClick={handleClick} style={{ background: seleccionado ? '#f0f6ff' : '#fff', borderRadius: '12px', border: `1.5px solid ${seleccionado ? '#185FA5' : '#EFEFED'}`, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', cursor: 'pointer', transition: 'all .15s' }}
+      onMouseEnter={e => { if (!seleccionado) e.currentTarget.style.borderColor='#b5d4f4' }}
+      onMouseLeave={e => { if (!seleccionado) e.currentTarget.style.borderColor='#EFEFED' }}>
+      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: '13px', fontWeight: '600', color: seleccionado ? '#185FA5' : '#222' }}>{sector}</div>
+        <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px' }}>
+          {incs.length} inc. · {incs.filter(i=>i.grado==='critico').length > 0 ? `${incs.filter(i=>i.grado==='critico').length} crítica` : 'sin críticas'}
+        </div>
+      </div>
+      <div style={{ fontSize: '10px', color: '#ccc' }}>⋮⋮</div>
+    </div>
+  )
+}
+
+function ModalSector({ sector, incs, onClose }) {
+  const criticas = incs.filter(i => i.grado === 'critico')
+  const moderadas = incs.filter(i => i.grado === 'moderado')
+  const tiempoPerdido = incs.reduce((acc, i) => {
+    if (i.horaInicio && i.horaFin) {
+      const [h1,m1] = i.horaInicio.split(':').map(Number)
+      const [h2,m2] = i.horaFin.split(':').map(Number)
+      return acc + (h2*60+m2) - (h1*60+m1)
+    }
+    return acc
+  }, 0)
+  const gradoMasFrecuente = ['critico','moderado','leve','informativo'].find(g => incs.some(i => i.grado === g)) || '—'
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '520px', maxHeight: '85vh', overflowY: 'auto', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '28px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: '700', color: '#111' }}>{sector}</div>
+            <div style={{ fontSize: '13px', color: '#aaa', marginTop: '2px' }}>Detalle del turno</div>
+          </div>
+          <button onClick={onClose} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', fontSize: '18px', color: '#888' }}>×</button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px', marginBottom: '20px' }}>
+          {[
+            ['Incidencias', incs.length, '#E24B4A'],
+            ['Críticas', criticas.length, '#E24B4A'],
+            ['Moderadas', moderadas.length, '#BA7517'],
+            ['Tiempo perdido', tiempoPerdido > 0 ? tiempoPerdido + ' min' : '—', '#BA7517'],
+          ].map(([l,v,c]) => (
+            <div key={l} style={{ background: '#F7F7F5', borderRadius: '10px', padding: '12px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '4px', fontWeight: '500' }}>{l}</div>
+              <div style={{ fontSize: '20px', fontWeight: '700', color: c, lineHeight: 1 }}>{v}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ fontSize: '12px', fontWeight: '600', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Incidencias</div>
+        {incs.length === 0 ? (
+          <div style={{ color: '#ccc', fontSize: '13px', textAlign: 'center', padding: '2rem' }}>Sin incidencias</div>
+        ) : (
+          incs.map(inc => (
+            <div key={inc.id} style={{ background: '#fafafa', borderRadius: '10px', padding: '12px 14px', marginBottom: '8px', border: '1px solid #EFEFED' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
+                <span style={{ fontSize: '12px', color: '#aaa', minWidth: '36px' }}>{inc.horaInicio}</span>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#111', flex: 1 }}>{inc.categoriaNombre}</span>
+                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', background: gradoBg[inc.grado], color: gradoColor[inc.grado], fontWeight: '600' }}>{inc.grado}</span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#666', lineHeight: '1.5', marginBottom: inc.notaReunion ? '8px' : '0' }}>{inc.descripcion}</div>
+              {inc.notaReunion && (
+                <div style={{ background: '#FFFBF0', border: '1px solid #F5E6B0', borderRadius: '8px', padding: '8px 10px', fontSize: '11px', color: '#7A6000', fontStyle: 'italic', lineHeight: '1.5' }}>
+                  {inc.notaReunion}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </>
   )
 }
 
@@ -172,17 +276,16 @@ function ModalFranja({ franjas, incsPorFranja, onSelect, onClose }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '400px', overflowY: 'auto' }}>
           {franjas.map(f => {
             const cant = incsPorFranja[f]?.length || 0
-            const label = f.replace('-', ' — ')
             const hActual = new Date().getHours()
             const hFranja = parseInt(f.split(':')[0])
             const esActual = hFranja === hActual
             return (
               <div key={f} onClick={() => onSelect(f)}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: '12px', border: `1.5px solid ${esActual ? '#185FA5' : '#e8e8e8'}`, background: esActual ? '#f0f6ff' : '#fafafa', cursor: 'pointer' }}
-                onMouseEnter={e => { if (!esActual) { e.currentTarget.style.borderColor='#185FA5'; e.currentTarget.style.background='#f8fbff' }}}
-                onMouseLeave={e => { if (!esActual) { e.currentTarget.style.borderColor='#e8e8e8'; e.currentTarget.style.background='#fafafa' }}}>
+                onMouseEnter={e => { if (!esActual) e.currentTarget.style.borderColor='#185FA5' }}
+                onMouseLeave={e => { if (!esActual) e.currentTarget.style.borderColor='#e8e8e8' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: esActual ? '700' : '500', color: esActual ? '#185FA5' : '#333' }}>{label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: esActual ? '700' : '500', color: esActual ? '#185FA5' : '#333' }}>{f.replace('-', ' — ')}</span>
                   {esActual && <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: '#185FA5', color: '#fff', fontWeight: '600' }}>ahora</span>}
                 </div>
                 {cant > 0
@@ -229,7 +332,7 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) 
         <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
         <span style={{ fontSize: '12px', color: '#aaa', fontWeight: '500', minWidth: '38px' }}>{inc.horaInicio}</span>
         <span style={{ fontSize: '13px', fontWeight: '600', color: '#111', minWidth: '90px' }}>
-          {inc.sala === 'grande' ? 'Grande' : inc.sala === 'chica' ? 'Chica' : 'Ambas'}
+          {inc.sala === 'grande' ? 'Grande' : inc.sala === 'chica' ? 'Chica' : inc.sala === 'ambas' ? 'Ambas' : '—'}
           {inc.lineas?.length > 0 ? ' · ' + inc.lineas.join(' ') : ''}
         </span>
         <span style={{ flex: 1, fontSize: '13px', color: '#555' }}>{inc.categoriaNombre}</span>
