@@ -4,6 +4,7 @@ import { signOut } from 'firebase/auth'
 import { db, auth } from './firebase'
 import Drawer from './Drawer'
 import Configuracion from './Configuracion'
+import Produccion from './Produccion'
 
 const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', informativo: '#1D9E75' }
 const gradoBg = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
@@ -25,8 +26,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [modalIniciarTurno, setModalIniciarTurno] = useState(false)
   const [modalHistorial, setModalHistorial] = useState(false)
   const [modalConfig, setModalConfig] = useState(false)
-  const [produccion, setProduccion] = useState({})
-  const [modalProduccion, setModalProduccion] = useState(null)
+  const [panelProduccion, setPanelProduccion] = useState(false)
   const [horaActual, setHoraActual] = useState('')
 
   useEffect(() => {
@@ -55,15 +55,6 @@ export default function Tablero({ user, userData, onVerInforme }) {
     getDoc(doc(db,'turnos',turnoId)).then(s => setTurnoExiste(s.exists()))
     const q = query(collection(db,'turnos',turnoId,'incidencias'), orderBy('horaInicio','asc'))
     return onSnapshot(q, snap => setIncidencias(snap.docs.map(d=>({id:d.id,...d.data()}))))
-  }, [turnoId])
-
-  useEffect(() => {
-    if (!turnoId) return
-    getDocs(collection(db,'turnos',turnoId,'produccion')).then(snap => {
-      const data = {}
-      snap.docs.forEach(d => { data[d.data().franja] = d.data() })
-      setProduccion(data)
-    })
   }, [turnoId])
 
   const activas = incidencias.filter(i => !i.eliminado)
@@ -133,7 +124,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
           {turnoExiste && (
             <button onClick={() => { if(window.confirm('¿Cerrar el turno? No podrás agregar más incidencias.')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '600' }}>⏹ Cerrar turno</button>
           )}
-          <button onClick={() => setModalProduccion('panel')} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>📦 Producción</button>
+          <button onClick={() => setPanelProduccion(true)} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>📦 Producción</button>
           <button onClick={() => setModalHistorial(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📋 Historial</button>
           {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>⚙️ Config</button>}
           {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📊 Informes</button>}
@@ -248,18 +239,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
       {sectorDetalle && <ModalSector sector={sectorDetalle} incs={activas.filter(i => i.sectoresResponsables?.includes(sectorDetalle))} onClose={() => setSectorDetalle(null)} />}
       {modalConfig && <Configuracion onClose={() => setModalConfig(false)} />}
       {modalProduccion && (
-        <ModalProduccion
-          franja={modalProduccion}
-          inicial={produccion[modalProduccion]}
-          onGuardar={async (grande, chica) => {
-            const franjaId = modalProduccion.replace(/:/g,'').replace('-','_')
-            await setDoc(doc(db,'turnos',turnoId,'produccion',franjaId), { franja: modalProduccion, grande, chica, cargadoEn: serverTimestamp() })
-            setProduccion(p => ({ ...p, [modalProduccion]: { grande, chica } }))
-            setModalProduccion(null)
-          }}
-          onClose={() => setModalProduccion(null)}
-        />
-      )}
+        {panelProduccion && <Produccion turnoId={turnoId} config={config} onClose={() => setPanelProduccion(false)} />}
       {modalHistorial && <ModalHistorial onClose={() => setModalHistorial(false)} turnoIdActual={turnoId} />}
       {modalIniciarTurno && (
         <ModalIniciarTurno
