@@ -22,6 +22,11 @@ export default function Tablero({ user, userData }) {
   const [sectorDetalle, setSectorDetalle] = useState(null)
   const [turnoExiste, setTurnoExiste] = useState(false)
   const [modalIniciarTurno, setModalIniciarTurno] = useState(false)
+  const [horaActual, setHoraActual] = useState('')
+  useEffect(() => {
+    const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
+    tick(); const t = setInterval(tick, 10000); return () => clearInterval(t)
+  }, [])
 
   useEffect(() => {
     const hoy = new Date()
@@ -104,7 +109,11 @@ export default function Tablero({ user, userData }) {
           </div>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <span style={{ fontSize: '24px', fontWeight: '700', color: '#111', letterSpacing: '-0.5px' }}>{horaActual}</span>
           <span style={{ fontSize: '12px', color: '#aaa' }}>{config?.inicio || '05:00'} — {config?.fin || '14:00'}</span>
+          {turnoExiste && (
+            <button onClick={() => { if(window.confirm('¿Cerrar el turno? No podrás agregar más incidencias.')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #fde8e8', background:'#fef9f9', cursor:'pointer', color:'#E24B4A', fontWeight:'600' }}>⏹ Cerrar turno</button>
+          )}
           <span style={{ fontSize: '13px', fontWeight: '600', color: '#333' }}>Obj: {config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'} ctos</span>
           <button onClick={() => signOut(auth)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#888' }}>Salir</button>
         </div>
