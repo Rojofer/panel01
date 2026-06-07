@@ -332,7 +332,7 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px' }}>Fin <span style={{ color: '#aaa' }}>opcional</span></div>
-                    <input type="time" value={horaFin} min={horaInicio} onChange={e => setHoraFin(e.target.value)}
+                    <input type="time" value={horaFin} min={horaInicio ? (() => { const [h,m] = horaInicio.split(':').map(Number); const total = h*60+m+1; return `${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}` })() : ''} onChange={e => setHoraFin(e.target.value)}
                       style={{ width: '100%', fontSize: '14px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '9px 12px' }} />
                   </div>
                 </div>
