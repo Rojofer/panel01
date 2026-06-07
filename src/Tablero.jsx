@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, query, orderBy, onSnapshot, doc, getDoc, getDocs, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { db, auth } from './firebase'
 import Drawer from './Drawer'
@@ -476,6 +476,7 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
   async function guardar() {
     setSaving(true)
     await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), { grado, descripcion, categoriaId: categoria, categoriaNombre, sectoresResponsables: responsables, editadoPor: userData.nombre, editadoEn: serverTimestamp() })
+    await addDoc(collection(db,'log'), { accion: 'editar_incidencia', turnoId, recursoId: inc.id, usuarioNombre: userData.nombre, datos: { gradoAnterior: inc.grado, descripcionAnterior: inc.descripcion }, timestamp: serverTimestamp() })
     setSaving(false); onClose()
   }
 
@@ -526,6 +527,7 @@ function ModalHistorial({ onClose, turnoIdActual }) {
   const [turnos, setTurnos] = useState([])
   const [turnoAbierto, setTurnoAbierto] = useState(null)
   const [incidencias, setIncidencias] = useState([])
+  const [logs, setLogs] = useState([])
   const [cargando, setCargando] = useState(true)
 
   useEffect(() => {
@@ -544,6 +546,8 @@ function ModalHistorial({ onClose, turnoIdActual }) {
     setTurnoAbierto(turnoId)
     const snap = await getDocs(query(collection(db,'turnos',turnoId,'incidencias'), orderBy('horaInicio','asc')))
     setIncidencias(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => !i.eliminado))
+    const logSnap = await getDocs(query(collection(db,'log'), orderBy('timestamp','desc')))
+    setLogs(logSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(l => l.turnoId === turnoId))
   }
 
   const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', informativo: '#1D9E75' }
@@ -592,6 +596,21 @@ function ModalHistorial({ onClose, turnoIdActual }) {
                       </div>
                     ))
                   }
+
+                  {logs.filter(l => l.turnoId === t.id).length > 0 && (
+                    <div style={{ marginTop:'12px', borderTop:'1px solid #F5F5F3', paddingTop:'12px' }}>
+                      <div style={{ fontSize:'11px', fontWeight:'600', color:'#aaa', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:'8px' }}>Log de cambios</div>
+                      {logs.filter(l => l.turnoId === t.id).map(l => (
+                        <div key={l.id} style={{ display:'flex', gap:'8px', alignItems:'center', padding:'6px 0', borderBottom:'1px solid #F5F5F3', fontSize:'12px' }}>
+                          <span style={{ padding:'2px 7px', borderRadius:'6px', background: l.accion==='eliminar_incidencia'?'#fef2f2':'#f0f6ff', color: l.accion==='eliminar_incidencia'?'#E24B4A':'#185FA5', fontWeight:'600', flexShrink:0, fontSize:'10px' }}>
+                            {l.accion === 'eliminar_incidencia' ? 'Eliminó' : 'Editó'}
+                          </span>
+                          <span style={{ flex:1, color:'#555' }}>{l.datos?.categoria || l.datos?.descripcionAnterior?.slice(0,40)}</span>
+                          <span style={{ color:'#aaa', flexShrink:0 }}>{l.usuarioNombre}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -643,6 +662,7 @@ function ModalEliminar({ inc, turnoId, userData, onClose }) {
     if (!motivo.trim()) return
     setSaving(true)
     await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), { eliminado: true, eliminadoPor: userData.nombre, eliminadoEn: serverTimestamp(), motivoEliminacion: motivo })
+    await addDoc(collection(db,'log'), { accion: 'eliminar_incidencia', turnoId, recursoId: inc.id, usuarioNombre: userData.nombre, datos: { categoria: inc.categoriaNombre, motivo }, timestamp: serverTimestamp() })
     setSaving(false); onClose()
   }
 
