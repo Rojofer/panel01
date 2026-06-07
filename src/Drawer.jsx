@@ -48,6 +48,13 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
   function toggleLinea(l) { setLineas(p => p.includes(l) ? p.filter(x => x !== l) : [...p, l]) }
   function addTag() { if (!tagInput.trim()) return; setEtiquetas(p => [...p, tagInput.trim()]); setTagInput('') }
 
+  function minFin() {
+    if (!horaInicio) return ''
+    const [h, m] = horaInicio.split(':').map(Number)
+    const total = h * 60 + m + 1
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+  }
+
   async function agregarCategoria() {
     if (!nuevaCat.trim()) return
     const id = 'c' + Date.now()
@@ -65,17 +72,12 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
       if (!grado) e.grado = 'Seleccioná el grado'
       if (!descripcion.trim()) e.descripcion = 'Describí qué pasó'
     }
-    if (step === 3) {
-      if (!horaInicio) e.horaInicio = 'Ingresá la hora de inicio'
-    }
+    if (step === 3 && !horaInicio) e.horaInicio = 'Ingresá la hora de inicio'
     setErrores(e)
     return Object.keys(e).length === 0
   }
 
-  function siguiente() {
-    if (!validar()) return
-    setStep(s => s + 1)
-  }
+  function siguiente() { if (!validar()) return; setStep(s => s + 1) }
 
   async function guardar() {
     if (!validar()) return
@@ -122,24 +124,15 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
     return (
       <div>
         <div style={{ position: 'relative' }}>
-          <input
-            value={busq}
-            onChange={e => setBusq(e.target.value)}
-            placeholder={placeholder}
-            style={{ width: '100%', fontSize: '13px', padding: '9px 32px 9px 12px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fafafa' }}
-          />
-          {busq && (
-            <span onClick={() => setBusq('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#bbb', fontSize: '16px' }}>×</span>
-          )}
+          <input value={busq} onChange={e => setBusq(e.target.value)} placeholder={placeholder}
+            style={{ width: '100%', fontSize: '13px', padding: '9px 32px 9px 12px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fafafa', boxSizing: 'border-box' }} />
+          {busq && <span onClick={() => setBusq('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#bbb', fontSize: '16px' }}>×</span>}
         </div>
         {busq.length > 0 && filtrados.length > 0 && (
           <div style={{ border: '1.5px solid #e8e8e8', borderRadius: '10px', overflow: 'hidden', marginTop: '6px', maxHeight: '180px', overflowY: 'auto', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
             {filtrados.map(s => (
-              <div
-                key={s}
-                onClick={() => { toggle(s) }}
-                style={{ padding: '9px 14px', fontSize: '13px', cursor: 'pointer', background: seleccionados.includes(s) ? '#f0f6ff' : '#fff', borderBottom: '1px solid #f5f5f5', display: 'flex', alignItems: 'center', gap: '8px' }}
-              >
+              <div key={s} onClick={() => toggle(s)}
+                style={{ padding: '9px 14px', fontSize: '13px', cursor: 'pointer', background: seleccionados.includes(s) ? '#f0f6ff' : '#fff', borderBottom: '1px solid #f5f5f5', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: `2px solid ${seleccionados.includes(s) ? '#185FA5' : '#ddd'}`, background: seleccionados.includes(s) ? '#185FA5' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {seleccionados.includes(s) && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fff' }} />}
                 </div>
@@ -169,9 +162,9 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 10, backdropFilter: 'blur(2px)' }} />
-      <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', position: 'fixed', top: 0, right: 0, bottom: 0, width: '380px', background: '#fff', borderLeft: '1px solid #f0f0f0', zIndex: 11, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.1)' }}>
+      <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', position: 'fixed', top: 0, right: 0, bottom: 0, width: '480px', background: '#fff', borderLeft: '1px solid #f0f0f0', zIndex: 11, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.1)', overflowX: 'hidden' }}>
 
-        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f0f0f0', flexShrink: 0 }}>
+        <div style={{ padding: '20px 28px 16px', borderBottom: '1px solid #f0f0f0', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '18px', fontWeight: '600', color: '#111', marginBottom: '3px' }}>Nueva incidencia</div>
@@ -197,7 +190,7 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
           )}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '20px 28px', scrollbarWidth: 'thin', scrollbarColor: '#e0e0e0 transparent' }}>
           {done ? (
             <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
               <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#e8f5ee', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '24px' }}>✓</div>
@@ -214,10 +207,10 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
             <div>
               <div style={{ marginBottom: '20px' }}>
                 {fieldLabel('Categoría', true)}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '6px', marginBottom: '10px' }}>
                   {categorias.map(c => (
                     <button key={c.id} onClick={() => { setCategoria(c.id); setCategoriaNombre(c.nombre); setErrores(e => ({...e, categoria: null})) }}
-                      style={{ padding: '10px 8px', fontSize: '12px', borderRadius: '10px', border: `1.5px solid ${categoria === c.id ? '#185FA5' : '#e8e8e8'}`, background: categoria === c.id ? '#f0f6ff' : '#fafafa', color: categoria === c.id ? '#185FA5' : '#555', cursor: 'pointer', fontWeight: categoria === c.id ? '600' : '400', lineHeight: '1.3', textAlign: 'center' }}>
+                      style={{ padding: '7px 4px', fontSize: '11px', borderRadius: '8px', border: `1.5px solid ${categoria === c.id ? '#185FA5' : '#e8e8e8'}`, background: categoria === c.id ? '#f0f6ff' : '#fafafa', color: categoria === c.id ? '#185FA5' : '#555', cursor: 'pointer', fontWeight: categoria === c.id ? '600' : '400', lineHeight: '1.3', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {c.nombre}
                     </button>
                   ))}
@@ -230,7 +223,7 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
                 ) : (
                   <div style={{ background: '#f5f8ff', borderRadius: '12px', padding: '12px', border: '1.5px solid #dce8f5', marginTop: '8px' }}>
                     <input value={nuevaCat} onChange={e => setNuevaCat(e.target.value)} placeholder="Nombre de la categoría..."
-                      style={{ width: '100%', fontSize: '13px', marginBottom: '8px', borderRadius: '8px', border: '1.5px solid #e8e8e8', padding: '8px 12px' }} />
+                      style={{ width: '100%', fontSize: '13px', marginBottom: '8px', borderRadius: '8px', border: '1.5px solid #e8e8e8', padding: '8px 12px', boxSizing: 'border-box' }} />
                     <div style={{ display: 'flex', gap: '6px' }}>
                       <button onClick={agregarCategoria} style={{ flex: 1, fontSize: '12px', padding: '7px', borderRadius: '8px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: '500' }}>Agregar y usar</button>
                       <button onClick={() => setMostrarNuevaCat(false)} style={{ fontSize: '12px', padding: '7px 12px', borderRadius: '8px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888' }}>Cancelar</button>
@@ -257,7 +250,7 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
                 {fieldLabel('¿Qué pasó?', true)}
                 <textarea value={descripcion} onChange={e => { setDescripcion(e.target.value); setErrores(ex => ({...ex, descripcion: null})) }}
                   placeholder="Describí brevemente qué ocurrió..."
-                  style={{ width: '100%', fontSize: '13px', minHeight: '80px', resize: 'vertical', borderRadius: '10px', border: `1.5px solid ${errores.descripcion ? '#E24B4A' : '#e8e8e8'}`, padding: '10px 12px', fontFamily: 'inherit', background: '#fafafa' }} />
+                  style={{ width: '100%', fontSize: '13px', minHeight: '80px', resize: 'vertical', borderRadius: '10px', border: `1.5px solid ${errores.descripcion ? '#E24B4A' : '#e8e8e8'}`, padding: '10px 12px', fontFamily: 'inherit', background: '#fafafa', boxSizing: 'border-box' }} />
                 {errorMsg('descripcion')}
               </div>
 
@@ -266,8 +259,8 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
                 <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '8px' }}>Palabras clave · ej: "cinta huesos", "WPA21"</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="Escribí y presioná Enter..."
-                    style={{ flex: 1, fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '8px 12px', background: '#fafafa' }} />
-                  <button onClick={addTag} style={{ fontSize: '12px', padding: '8px 14px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555', fontWeight: '500' }}>+ Add</button>
+                    style={{ flex: 1, fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '8px 12px', background: '#fafafa', minWidth: 0 }} />
+                  <button onClick={addTag} style={{ fontSize: '12px', padding: '8px 14px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555', fontWeight: '500', flexShrink: 0 }}>+ Add</button>
                 </div>
                 {etiquetas.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
@@ -304,7 +297,7 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
                     </button>
                   ))}
                 </div>
-                {sala !== 'chica' && sala !== '' && (
+                {(sala === 'grande' || sala === 'ambas') && (
                   <div style={{ marginBottom: '12px' }}>
                     {fieldLabel('Líneas', false, true)}
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -328,12 +321,12 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px' }}>Inicio *</div>
                     <input type="time" value={horaInicio} onChange={e => { setHoraInicio(e.target.value); setErrores(ex => ({...ex, horaInicio: null})) }}
-                      style={{ width: '100%', fontSize: '14px', borderRadius: '10px', border: `1.5px solid ${errores.horaInicio ? '#E24B4A' : '#e8e8e8'}`, padding: '9px 12px' }} />
+                      style={{ width: '100%', fontSize: '14px', borderRadius: '10px', border: `1.5px solid ${errores.horaInicio ? '#E24B4A' : '#e8e8e8'}`, padding: '9px 12px', boxSizing: 'border-box' }} />
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px' }}>Fin <span style={{ color: '#aaa' }}>opcional</span></div>
-                    <input type="time" value={horaFin} min={horaInicio ? (() => { const [h,m] = horaInicio.split(':').map(Number); const total = h*60+m+1; return `${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}` })() : ''} onChange={e => setHoraFin(e.target.value)}
-                      style={{ width: '100%', fontSize: '14px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '9px 12px' }} />
+                    <input type="time" value={horaFin} min={minFin()} onChange={e => setHoraFin(e.target.value)}
+                      style={{ width: '100%', fontSize: '14px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '9px 12px', boxSizing: 'border-box' }} />
                   </div>
                 </div>
                 {errorMsg('horaInicio')}
@@ -370,7 +363,7 @@ export default function Drawer({ franja, turnoId, user, userData, onClose }) {
         </div>
 
         {!done && step < 3 && (
-          <div style={{ padding: '14px 24px', borderTop: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', flexShrink: 0, background: '#fff' }}>
+          <div style={{ padding: '14px 28px', borderTop: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', flexShrink: 0, background: '#fff' }}>
             <button onClick={() => step > 1 && setStep(step - 1)}
               style={{ fontSize: '13px', padding: '9px 18px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', visibility: step > 1 ? 'visible' : 'hidden', fontWeight: '500' }}>← Volver</button>
             <button onClick={siguiente}
