@@ -13,6 +13,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [incidencias, setIncidencias] = useState([])
   const [config, setConfig] = useState(null)
   const [turnoId, setTurnoId] = useState('')
+  const [turnoExiste, setTurnoExiste] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editando, setEditando] = useState(null)
   const [eliminando, setEliminando] = useState(null)
@@ -21,23 +22,13 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [sectorFiltro, setSectorFiltro] = useState(null)
   const [gradoFiltro, setGradoFiltro] = useState(null)
   const [sectorDetalle, setSectorDetalle] = useState(null)
-  const [turnoExiste, setTurnoExiste] = useState(false)
   const [modalIniciarTurno, setModalIniciarTurno] = useState(false)
   const [modalHistorial, setModalHistorial] = useState(false)
   const [modalConfig, setModalConfig] = useState(false)
   const [produccion, setProduccion] = useState({})
   const [modalProduccion, setModalProduccion] = useState(null)
-
-  useEffect(() => {
-    if (!turnoId) return
-    getDocs(collection(db,'turnos',turnoId,'produccion')).then(snap => {
-      const data = {}
-      snap.docs.forEach(d => { data[d.id] = d.data() })
-      setProduccion(data)
-    })
-  }, [turnoId])
-  
   const [horaActual, setHoraActual] = useState('')
+
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
     tick(); const t = setInterval(tick, 10000); return () => clearInterval(t)
@@ -66,6 +57,15 @@ export default function Tablero({ user, userData, onVerInforme }) {
     return onSnapshot(q, snap => setIncidencias(snap.docs.map(d=>({id:d.id,...d.data()}))))
   }, [turnoId])
 
+  useEffect(() => {
+    if (!turnoId) return
+    getDocs(collection(db,'turnos',turnoId,'produccion')).then(snap => {
+      const data = {}
+      snap.docs.forEach(d => { data[d.data().franja] = d.data() })
+      setProduccion(data)
+    })
+  }, [turnoId])
+
   const activas = incidencias.filter(i => !i.eliminado)
   const franjas = config ? generarFranjas(config) : []
   const incsPorFranja = franjas.reduce((acc,f) => { acc[f]=activas.filter(i=>i.franja===f); return acc }, {})
@@ -91,13 +91,20 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const tiempoOrdenado = Object.entries(tiempoPorCategoria).sort((a,b) => b[1]-a[1]).slice(0,4)
   const catColores = ['#BA7517','#E24B4A','#185FA5','#1D9E75','#888780']
 
-  const gradoCount = { critico: activas.filter(i=>i.grado==='critico').length, moderado: activas.filter(i=>i.grado==='moderado').length, leve: activas.filter(i=>i.grado==='leve').length, informativo: activas.filter(i=>i.grado==='informativo').length }
+  const gradoCount = {
+    critico: activas.filter(i=>i.grado==='critico').length,
+    moderado: activas.filter(i=>i.grado==='moderado').length,
+    leve: activas.filter(i=>i.grado==='leve').length,
+    informativo: activas.filter(i=>i.grado==='informativo').length
+  }
+
+  function toggleGrado(g) { setGradoFiltro(gradoFiltro === g ? null : g) }
+  function toggleSector(s) { setSectorFiltro(sectorFiltro === s ? null : s) }
 
   async function iniciarTurno() {
     await setDoc(doc(db,'turnos',turnoId), {
       fecha: new Date().toISOString().slice(0,10),
-      nombre: 'Mañana',
-      estado: 'activo',
+      nombre: 'Mañana', estado: 'activo',
       objetivoGrande: config?.objetivoGrande || 350,
       objetivoChica: config?.objetivoChica || 100,
       inicio: config?.inicio || '05:00',
@@ -106,9 +113,6 @@ export default function Tablero({ user, userData, onVerInforme }) {
     })
     setTurnoExiste(true)
   }
-
-  function toggleGrado(g) { setGradoFiltro(gradoFiltro === g ? null : g) }
-  function toggleSector(s) { setSectorFiltro(sectorFiltro === s ? null : s) }
 
   const hayFiltros = sectorFiltro || gradoFiltro
 
@@ -123,25 +127,27 @@ export default function Tablero({ user, userData, onVerInforme }) {
             {sectorFiltro && <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>{sectorFiltro} <span onClick={() => setSectorFiltro(null)} style={{ cursor: 'pointer', opacity: .7 }}>×</span></span>}
           </div>
         )}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', alignItems: 'center' }}>
           <span style={{ fontSize: '24px', fontWeight: '700', color: '#111', letterSpacing: '-0.5px' }}>{horaActual}</span>
           <span style={{ fontSize: '12px', color: '#aaa' }}>{config?.inicio || '05:00'} — {config?.fin || '14:00'}</span>
           {turnoExiste && (
-            <button onClick={() => { if(window.confirm('¿Cerrar el turno? No podrás agregar más incidencias.')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #fde8e8', background:'#fef9f9', cursor:'pointer', color:'#E24B4A', fontWeight:'600' }}>⏹ Cerrar turno</button>
+            <button onClick={() => { if(window.confirm('¿Cerrar el turno? No podrás agregar más incidencias.')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '600' }}>⏹ Cerrar turno</button>
           )}
-          <span style={{ fontSize: '13px', fontWeight: '600', color: '#333' }}>Obj: {config ? (config.objetivoGrande + config.objetivoChica) * franjas.length : '...'} ctos</span>
-          {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>⚙️ Config</button>}
-          {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>📊 Informes</button>}
+          <button onClick={() => setModalHistorial(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📋 Historial</button>
+          {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>⚙️ Config</button>}
+          {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📊 Informes</button>}
           <button onClick={() => signOut(auth)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#888' }}>Salir</button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '16px', padding: '16px 24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 280px' : '1fr', gap: '16px', padding: '16px 24px' }}>
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
             <div style={{ background: '#fff', borderRadius: '14px', padding: '14px 16px', border: '1px solid #EFEFED' }}>
               <div style={{ fontSize: '11px', color: '#aaa', fontWeight: '500', marginBottom: '4px' }}>Incidencias del turno</div>
-              <div style={{ fontSize: '28px', fontWeight: '700', color: '#E24B4A', lineHeight: 1, marginBottom: '10px' }}>{incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '14px', color: '#aaa', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}</div>
+              <div style={{ fontSize: '28px', fontWeight: '700', color: '#E24B4A', lineHeight: 1, marginBottom: '10px' }}>
+                {incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '14px', color: '#aaa', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}
+              </div>
               {activas.length > 0 && (
                 <div style={{ height: '8px', borderRadius: '4px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '10px' }}>
                   {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && (
@@ -204,31 +210,31 @@ export default function Tablero({ user, userData, onVerInforme }) {
             </div>
           )}
 
-          <div style={{ background:'#fff', borderRadius:'14px', border:'1px solid #EFEFED', marginBottom:'16px', overflow:'hidden' }}>
-            <div style={{ padding:'10px 16px', borderBottom:'1px solid #EFEFED', fontSize:'12px', fontWeight:'600', color:'#555' }}>Producción por franja</div>
+          <div style={{ background: '#fff', borderRadius: '14px', border: '1px solid #EFEFED', marginBottom: '16px', overflow: 'hidden' }}>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid #EFEFED', fontSize: '12px', fontWeight: '600', color: '#555' }}>Producción por franja</div>
             {franjas.map(franja => {
               const prod = produccion[franja]
               const objG = config?.objetivoGrande || 350
               const objC = config?.objetivoChica || 100
               return (
-                <div key={franja} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'8px 16px', borderBottom:'1px solid #F5F5F3' }}>
-                  <span style={{ fontSize:'12px', fontWeight:'600', color:'#aaa', minWidth:'100px' }}>{franja.replace('-',' — ')}</span>
-                  <div style={{ display:'flex', gap:'16px', flex:1 }}>
-                    <span style={{ fontSize:'12px', color: prod?.grande != null ? (prod.grande >= objG ? '#1D9E75' : '#E24B4A') : '#ccc' }}>
-                      Grande: <strong>{prod?.grande ?? '—'}</strong>{prod?.grande != null && <span style={{ fontSize:'10px', marginLeft:'4px', color:'#aaa' }}>obj {objG}</span>}
+                <div key={franja} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 16px', borderBottom: '1px solid #F5F5F3' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#aaa', minWidth: '110px' }}>{franja.replace('-', ' — ')}</span>
+                  <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
+                    <span style={{ fontSize: '12px', color: prod?.grande != null ? (prod.grande >= objG ? '#1D9E75' : '#E24B4A') : '#ccc' }}>
+                      Grande: <strong>{prod?.grande ?? '—'}</strong>{prod?.grande != null && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#aaa' }}>obj {objG}</span>}
                     </span>
-                    <span style={{ fontSize:'12px', color: prod?.chica != null ? (prod.chica >= objC ? '#1D9E75' : '#E24B4A') : '#ccc' }}>
-                      Chica: <strong>{prod?.chica ?? '—'}</strong>{prod?.chica != null && <span style={{ fontSize:'10px', marginLeft:'4px', color:'#aaa' }}>obj {objC}</span>}
+                    <span style={{ fontSize: '12px', color: prod?.chica != null ? (prod.chica >= objC ? '#1D9E75' : '#E24B4A') : '#ccc' }}>
+                      Chica: <strong>{prod?.chica ?? '—'}</strong>{prod?.chica != null && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#aaa' }}>obj {objC}</span>}
                     </span>
                   </div>
-                  <button onClick={() => setModalProduccion(franja)} style={{ fontSize:'11px', padding:'3px 10px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555', flexShrink:0 }}>
+                  <button onClick={() => setModalProduccion(franja)} style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555', flexShrink: 0 }}>
                     {prod ? '✏️' : '+'}
                   </button>
                 </div>
               )
             })}
           </div>
-          
+
           {franjasFiltradas.length === 0 && (
             <div style={{ textAlign: 'center', padding: '3rem', color: '#ccc', fontSize: '14px' }}>
               {hayFiltros ? 'Sin incidencias con los filtros aplicados' : 'Sin incidencias registradas en el turno'}
@@ -243,39 +249,40 @@ export default function Tablero({ user, userData, onVerInforme }) {
               {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
                 <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id === ultimaIncId} />
               ))}
-              
-        <div>
-          {sectoresConInc.length > 0 && (
-            <>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>
-                Sectores · click filtra · doble click detalle
-              </div>
-              {sectoresConInc.map(s => (
-                <SectorCard key={s} sector={s} incs={activas.filter(i => i.sectoresResponsables?.includes(s))} seleccionado={sectorFiltro === s} onClick={() => toggleSector(s)} onDobleClick={() => setSectorDetalle(s)} />
-              ))}
-            </>
-          )}
+            </div>
+          ))}
         </div>
+
+        {sectoresConInc.length > 0 && (
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>
+              Sectores · click filtra · doble click detalle
+            </div>
+            {sectoresConInc.map(s => (
+              <SectorCard key={s} sector={s} incs={activas.filter(i => i.sectoresResponsables?.includes(s))} seleccionado={sectorFiltro === s} onClick={() => toggleSector(s)} onDobleClick={() => setSectorDetalle(s)} />
+            ))}
+          </div>
+        )}
       </div>
 
       {drawerOpen === 'elegir' && <ModalFranja franjas={franjas} incsPorFranja={incsPorFranja} onSelect={f => setDrawerOpen(f)} onClose={() => setDrawerOpen(false)} />}
       {drawerOpen && drawerOpen !== 'elegir' && <Drawer franja={drawerOpen} turnoId={turnoId} user={user} userData={userData} onClose={() => setDrawerOpen(false)} franjas={franjas} />}
       {editando && <ModalEditar inc={editando} turnoId={turnoId} categorias={categorias} sectores={sectores} userData={userData} onClose={() => setEditando(null)} />}
       {eliminando && userData.rol === 'owner' && <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />}
+      {sectorDetalle && <ModalSector sector={sectorDetalle} incs={activas.filter(i => i.sectoresResponsables?.includes(sectorDetalle))} onClose={() => setSectorDetalle(null)} />}
       {modalConfig && <Configuracion onClose={() => setModalConfig(false)} />}
       {modalProduccion && (
         <ModalProduccion
           franja={modalProduccion}
           inicial={produccion[modalProduccion]}
           onGuardar={async (grande, chica) => {
-            const franjaId = modalProduccion.replace(':','').replace(':','').replace('-','_')
+            const franjaId = modalProduccion.replace(/:/g,'').replace('-','_')
             await setDoc(doc(db,'turnos',turnoId,'produccion',franjaId), { franja: modalProduccion, grande, chica, cargadoEn: serverTimestamp() })
             setProduccion(p => ({ ...p, [modalProduccion]: { grande, chica } }))
             setModalProduccion(null)
           }}
           onClose={() => setModalProduccion(null)}
         />
-        )}
       )}
       {modalHistorial && <ModalHistorial onClose={() => setModalHistorial(false)} turnoIdActual={turnoId} />}
       {modalIniciarTurno && (
@@ -295,7 +302,6 @@ export default function Tablero({ user, userData, onVerInforme }) {
           onClose={() => setModalIniciarTurno(false)}
         />
       )}
-      {sectorDetalle && <ModalSector sector={sectorDetalle} incs={activas.filter(i => i.sectoresResponsables?.includes(sectorDetalle))} onClose={() => setSectorDetalle(null)} />}
     </div>
   )
 }
@@ -365,12 +371,7 @@ function ModalSector({ sector, incs, onClose }) {
           <button onClick={onClose} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', fontSize: '18px', color: '#888' }}>×</button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px', marginBottom: '20px' }}>
-          {[
-            ['Total', incs.length, '#E24B4A'],
-            ['Críticas', criticas.length, '#E24B4A'],
-            ['Moderadas', moderadas.length, '#BA7517'],
-            ['Tiempo', tiempoPerdido > 0 ? tiempoPerdido + 'm' : '—', '#BA7517'],
-          ].map(([l,v,c]) => (
+          {[['Total', incs.length, '#E24B4A'], ['Críticas', criticas.length, '#E24B4A'], ['Moderadas', moderadas.length, '#BA7517'], ['Tiempo', tiempoPerdido > 0 ? tiempoPerdido+'m' : '—', '#BA7517']].map(([l,v,c]) => (
             <div key={l} style={{ background: '#F7F7F5', borderRadius: '10px', padding: '12px 10px', textAlign: 'center' }}>
               <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '4px', fontWeight: '500' }}>{l}</div>
               <div style={{ fontSize: '20px', fontWeight: '700', color: c, lineHeight: 1 }}>{v}</div>
@@ -387,9 +388,7 @@ function ModalSector({ sector, incs, onClose }) {
               <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', background: gradoBg[inc.grado], color: gradoColor[inc.grado], fontWeight: '600' }}>{inc.grado}</span>
             </div>
             <div style={{ fontSize: '12px', color: '#666', lineHeight: '1.5', marginBottom: inc.notaReunion ? '8px' : '0' }}>{inc.descripcion}</div>
-            {inc.notaReunion && (
-              <div style={{ background: '#FFFBF0', border: '1px solid #F5E6B0', borderRadius: '8px', padding: '8px 10px', fontSize: '11px', color: '#7A6000', fontStyle: 'italic', lineHeight: '1.5' }}>{inc.notaReunion}</div>
-            )}
+            {inc.notaReunion && <div style={{ background: '#FFFBF0', border: '1px solid #F5E6B0', borderRadius: '8px', padding: '8px 10px', fontSize: '11px', color: '#7A6000', fontStyle: 'italic', lineHeight: '1.5' }}>{inc.notaReunion}</div>}
           </div>
         ))}
       </div>
@@ -571,173 +570,6 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
   )
 }
 
-function ModalHistorial({ onClose, turnoIdActual }) {
-  const [turnos, setTurnos] = useState([])
-  const [turnoAbierto, setTurnoAbierto] = useState(null)
-  const [incidencias, setIncidencias] = useState([])
-  const [logs, setLogs] = useState([])
-  const [cargando, setCargando] = useState(true)
-
-  useEffect(() => {
-    getDocs(collection(db,'turnos')).then(snap => {
-      const lista = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(t => t.id !== turnoIdActual)
-        .sort((a,b) => b.id.localeCompare(a.id))
-      setTurnos(lista)
-      setCargando(false)
-    })
-  }, [])
-
-  async function abrirTurno(turnoId) {
-    if (turnoAbierto === turnoId) { setTurnoAbierto(null); setIncidencias([]); return }
-    setTurnoAbierto(turnoId)
-    const snap = await getDocs(query(collection(db,'turnos',turnoId,'incidencias'), orderBy('horaInicio','asc')))
-    setIncidencias(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => !i.eliminado))
-    const logSnap = await getDocs(query(collection(db,'log'), orderBy('timestamp','desc')))
-    setLogs(logSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(l => l.turnoId === turnoId))
-  }
-
-  const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', informativo: '#1D9E75' }
-  const gradoBg = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
-
-  return (
-    <>
-      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.3)', zIndex:20 }} />
-      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:'580px', maxHeight:'85vh', overflowY:'auto', background:'#fff', borderRadius:'18px', zIndex:21, padding:'28px', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
-          <div style={{ fontSize:'18px', fontWeight:'700', color:'#111' }}>Historial de turnos</div>
-          <button onClick={onClose} style={{ width:'32px', height:'32px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', fontSize:'18px', color:'#888' }}>×</button>
-        </div>
-
-        {cargando && <div style={{ textAlign:'center', color:'#aaa', padding:'2rem' }}>Cargando...</div>}
-        {!cargando && turnos.length === 0 && <div style={{ textAlign:'center', color:'#ccc', padding:'2rem' }}>Sin turnos anteriores</div>}
-
-        {turnos.map(t => {
-          const abierto = turnoAbierto === t.id
-          return (
-            <div key={t.id} style={{ marginBottom:'8px', border:'1px solid #EFEFED', borderRadius:'12px', overflow:'hidden' }}>
-              <div onClick={() => abrirTurno(t.id)} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 16px', cursor:'pointer', background: abierto ? '#f8fbff' : '#fff' }}
-                onMouseEnter={e => e.currentTarget.style.background='#fafafa'}
-                onMouseLeave={e => e.currentTarget.style.background= abierto ? '#f8fbff' : '#fff'}>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:'14px', fontWeight:'600', color:'#111' }}>{t.fecha}</div>
-                  <div style={{ fontSize:'11px', color:'#aaa', marginTop:'2px' }}>{t.inicio || '05:00'} — {t.fin || '14:00'} · {t.estado === 'cerrado' ? 'Cerrado' : 'Activo'}</div>
-                </div>
-                <span style={{ fontSize:'11px', color:'#ccc' }}>{abierto ? '▲' : '▼'}</span>
-              </div>
-
-              {abierto && (
-                <div style={{ borderTop:'1px solid #F5F5F3', padding:'12px 16px' }}>
-                  {incidencias.length === 0
-                    ? <div style={{ color:'#ccc', fontSize:'13px', textAlign:'center', padding:'1rem' }}>Sin incidencias</div>
-                    : incidencias.map(inc => (
-                      <div key={inc.id} style={{ background:'#fafafa', borderRadius:'10px', padding:'10px 14px', marginBottom:'8px', border:'1px solid #EFEFED' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom: inc.descripcion ? '6px' : '0' }}>
-                          <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:gradoColor[inc.grado], flexShrink:0 }} />
-                          <span style={{ fontSize:'12px', color:'#aaa', minWidth:'36px' }}>{inc.horaInicio}</span>
-                          <span style={{ fontSize:'13px', fontWeight:'600', color:'#111', flex:1 }}>{inc.categoriaNombre}</span>
-                          <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'10px', background:gradoBg[inc.grado], color:gradoColor[inc.grado], fontWeight:'600' }}>{inc.grado}</span>
-                        </div>
-                        {inc.descripcion && <div style={{ fontSize:'12px', color:'#666', lineHeight:'1.5', marginBottom: inc.notaReunion ? '6px' : '0', paddingLeft:'16px' }}>{inc.descripcion}</div>}
-                        {inc.notaReunion && <div style={{ background:'#FFFBF0', border:'1px solid #F5E6B0', borderRadius:'8px', padding:'7px 10px', fontSize:'11px', color:'#7A6000', fontStyle:'italic', marginLeft:'16px' }}>{inc.notaReunion}</div>}
-                      </div>
-                    ))
-                  }
-
-                  {logs.filter(l => l.turnoId === t.id).length > 0 && (
-                    <div style={{ marginTop:'12px', borderTop:'1px solid #F5F5F3', paddingTop:'12px' }}>
-                      <div style={{ fontSize:'11px', fontWeight:'600', color:'#aaa', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:'8px' }}>Log de cambios</div>
-                      {logs.filter(l => l.turnoId === t.id).map(l => (
-                        <div key={l.id} style={{ display:'flex', gap:'8px', alignItems:'center', padding:'6px 0', borderBottom:'1px solid #F5F5F3', fontSize:'12px' }}>
-                          <span style={{ padding:'2px 7px', borderRadius:'6px', background: l.accion==='eliminar_incidencia'?'#fef2f2':'#f0f6ff', color: l.accion==='eliminar_incidencia'?'#E24B4A':'#185FA5', fontWeight:'600', flexShrink:0, fontSize:'10px' }}>
-                            {l.accion === 'eliminar_incidencia' ? 'Eliminó' : 'Editó'}
-                          </span>
-                          <span style={{ flex:1, color:'#555' }}>{l.datos?.categoria || l.datos?.descripcionAnterior?.slice(0,40)}{l.datos?.motivo ? ` · "${l.datos.motivo}"` : ''}</span>
-                          <span style={{ color:'#aaa', flexShrink:0 }}>{l.usuarioNombre}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </>
-  )
-}
-
-function ModalProduccion({ franja, inicial, onGuardar, onClose }) {
-  const [grande, setGrande] = useState(inicial?.grande ?? '')
-  const [chica, setChica] = useState(inicial?.chica ?? '')
-  const [saving, setSaving] = useState(false)
-
-  async function guardar() {
-    setSaving(true)
-    await onGuardar(grande === '' ? null : Number(grande), chica === '' ? null : Number(chica))
-    setSaving(false)
-  }
-
-  return (
-    <>
-      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.3)', zIndex:20 }} />
-      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:'340px', background:'#fff', borderRadius:'18px', zIndex:21, padding:'24px', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}>
-        <div style={{ fontSize:'17px', fontWeight:'700', color:'#111', marginBottom:'4px' }}>Producción</div>
-        <div style={{ fontSize:'13px', color:'#aaa', marginBottom:'20px' }}>Franja {franja.replace('-',' — ')}</div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'20px' }}>
-          <div>
-            <div style={{ fontSize:'12px', fontWeight:'600', color:'#555', marginBottom:'6px' }}>Sala grande (ctos)</div>
-            <input type="number" value={grande} onChange={e => setGrande(e.target.value)} placeholder="0" style={{ width:'100%', fontSize:'16px', borderRadius:'10px', border:'1.5px solid #e8e8e8', padding:'10px 12px', textAlign:'center' }} />
-          </div>
-          <div>
-            <div style={{ fontSize:'12px', fontWeight:'600', color:'#555', marginBottom:'6px' }}>Sala chica (ctos)</div>
-            <input type="number" value={chica} onChange={e => setChica(e.target.value)} placeholder="0" style={{ width:'100%', fontSize:'16px', borderRadius:'10px', border:'1.5px solid #e8e8e8', padding:'10px 12px', textAlign:'center' }} />
-          </div>
-        </div>
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={onClose} style={{ flex:1, padding:'10px', fontSize:'13px', borderRadius:'10px', border:'1.5px solid #e8e8e8', background:'#fff', cursor:'pointer', color:'#888', fontWeight:'500' }}>Cancelar</button>
-          <button onClick={guardar} disabled={saving} style={{ flex:2, padding:'10px', fontSize:'13px', fontWeight:'700', borderRadius:'10px', background:'#185FA5', color:'#fff', border:'none', cursor:'pointer' }}>{saving?'Guardando...':'Guardar'}</button>
-        </div>
-      </div>
-    </>
-  )
-}
-
-function ModalIniciarTurno({ onConfirm, onClose }) {
-  const hoy = new Date().toISOString().slice(0,10)
-  const [fecha, setFecha] = useState(hoy)
-  const [saving, setSaving] = useState(false)
-
-  async function confirmar() {
-    setSaving(true)
-    await onConfirm(fecha)
-    setSaving(false)
-  }
-
-  return (
-    <>
-      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.3)', zIndex:20 }} />
-      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:'360px', background:'#fff', borderRadius:'18px', zIndex:21, padding:'28px', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', boxShadow:'0 20px 60px rgba(0,0,0,0.15)' }}>
-        <div style={{ fontSize:'18px', fontWeight:'700', color:'#111', marginBottom:'6px' }}>Iniciar turno</div>
-        <div style={{ fontSize:'13px', color:'#aaa', marginBottom:'20px' }}>¿Para qué fecha es este turno?</div>
-        <div style={{ marginBottom:'20px' }}>
-          <div style={{ fontSize:'12px', fontWeight:'600', color:'#555', marginBottom:'8px' }}>Fecha de inicio del turno</div>
-          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ width:'100%', fontSize:'14px', borderRadius:'10px', border:'1.5px solid #e8e8e8', padding:'10px 12px' }} />
-        </div>
-        <div style={{ background:'#f0f6ff', border:'1px solid #b5d4f4', borderRadius:'10px', padding:'10px 14px', fontSize:'12px', color:'#185FA5', marginBottom:'20px' }}>
-          El turno puede extenderse más allá de la medianoche — las incidencias quedan bajo esta fecha.
-        </div>
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={onClose} style={{ flex:1, padding:'10px', fontSize:'13px', borderRadius:'10px', border:'1.5px solid #e8e8e8', background:'#fff', cursor:'pointer', color:'#888', fontWeight:'500' }}>Cancelar</button>
-          <button onClick={confirmar} disabled={saving||!fecha} style={{ flex:2, padding:'10px', fontSize:'13px', fontWeight:'700', borderRadius:'10px', background:'#1D9E75', color:'#fff', border:'none', cursor:'pointer' }}>{saving?'Iniciando...':'Iniciar turno'}</button>
-        </div>
-      </div>
-    </>
-  )
-}
-
 function ModalEliminar({ inc, turnoId, userData, onClose }) {
   const [motivo, setMotivo] = useState('')
   const [saving, setSaving] = useState(false)
@@ -764,6 +596,163 @@ function ModalEliminar({ inc, turnoId, userData, onClose }) {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
           <button onClick={confirmar} disabled={saving||!motivo.trim()} style={{ flex: 1, padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: motivo.trim()?'#E24B4A':'#f5a5a5', color: '#fff', border: 'none', cursor: motivo.trim()?'pointer':'not-allowed' }}>{saving?'Eliminando...':'Confirmar'}</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function ModalProduccion({ franja, inicial, onGuardar, onClose }) {
+  const [grande, setGrande] = useState(inicial?.grande ?? '')
+  const [chica, setChica] = useState(inicial?.chica ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function guardar() {
+    setSaving(true)
+    await onGuardar(grande === '' ? null : Number(grande), chica === '' ? null : Number(chica))
+    setSaving(false)
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '340px', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '24px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ fontSize: '17px', fontWeight: '700', color: '#111', marginBottom: '4px' }}>Producción</div>
+        <div style={{ fontSize: '13px', color: '#aaa', marginBottom: '20px' }}>Franja {franja.replace('-', ' — ')}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '6px' }}>Sala grande (ctos)</div>
+            <input type="number" value={grande} onChange={e => setGrande(e.target.value)} placeholder="0" style={{ width: '100%', fontSize: '16px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '10px 12px', textAlign: 'center' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '6px' }}>Sala chica (ctos)</div>
+            <input type="number" value={chica} onChange={e => setChica(e.target.value)} placeholder="0" style={{ width: '100%', fontSize: '16px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '10px 12px', textAlign: 'center' }} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
+          <button onClick={guardar} disabled={saving} style={{ flex: 2, padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving?'Guardando...':'Guardar'}</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function ModalHistorial({ onClose, turnoIdActual }) {
+  const [turnos, setTurnos] = useState([])
+  const [turnoAbierto, setTurnoAbierto] = useState(null)
+  const [incidencias, setIncidencias] = useState([])
+  const [logs, setLogs] = useState([])
+  const [cargando, setCargando] = useState(true)
+
+  useEffect(() => {
+    getDocs(collection(db,'turnos')).then(snap => {
+      const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.id !== turnoIdActual).sort((a,b) => b.id.localeCompare(a.id))
+      setTurnos(lista)
+      setCargando(false)
+    })
+  }, [])
+
+  async function abrirTurno(turnoId) {
+    if (turnoAbierto === turnoId) { setTurnoAbierto(null); setIncidencias([]); setLogs([]); return }
+    setTurnoAbierto(turnoId)
+    const [incSnap, logSnap] = await Promise.all([
+      getDocs(query(collection(db,'turnos',turnoId,'incidencias'), orderBy('horaInicio','asc'))),
+      getDocs(query(collection(db,'log'), orderBy('timestamp','desc')))
+    ])
+    setIncidencias(incSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => !i.eliminado))
+    setLogs(logSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(l => l.turnoId === turnoId))
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '580px', maxHeight: '85vh', overflowY: 'auto', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '28px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ fontSize: '18px', fontWeight: '700', color: '#111' }}>Historial de turnos</div>
+          <button onClick={onClose} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', fontSize: '18px', color: '#888' }}>×</button>
+        </div>
+        {cargando && <div style={{ textAlign: 'center', color: '#aaa', padding: '2rem' }}>Cargando...</div>}
+        {!cargando && turnos.length === 0 && <div style={{ textAlign: 'center', color: '#ccc', padding: '2rem' }}>Sin turnos anteriores</div>}
+        {turnos.map(t => {
+          const abierto = turnoAbierto === t.id
+          return (
+            <div key={t.id} style={{ marginBottom: '8px', border: '1px solid #EFEFED', borderRadius: '12px', overflow: 'hidden' }}>
+              <div onClick={() => abrirTurno(t.id)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', cursor: 'pointer', background: abierto ? '#f8fbff' : '#fff' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#111' }}>{t.fecha}</div>
+                  <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px' }}>{t.inicio || '05:00'} — {t.fin || '14:00'} · {t.estado === 'cerrado' ? 'Cerrado' : 'Activo'}</div>
+                </div>
+                <span style={{ fontSize: '11px', color: '#ccc' }}>{abierto ? '▲' : '▼'}</span>
+              </div>
+              {abierto && (
+                <div style={{ borderTop: '1px solid #F5F5F3', padding: '12px 16px' }}>
+                  {incidencias.length === 0
+                    ? <div style={{ color: '#ccc', fontSize: '13px', textAlign: 'center', padding: '1rem' }}>Sin incidencias</div>
+                    : incidencias.map(inc => (
+                      <div key={inc.id} style={{ background: '#fafafa', borderRadius: '10px', padding: '10px 14px', marginBottom: '8px', border: '1px solid #EFEFED' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: inc.descripcion ? '6px' : '0' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
+                          <span style={{ fontSize: '12px', color: '#aaa', minWidth: '36px' }}>{inc.horaInicio}</span>
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#111', flex: 1 }}>{inc.categoriaNombre}</span>
+                          <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', background: gradoBg[inc.grado], color: gradoColor[inc.grado], fontWeight: '600' }}>{inc.grado}</span>
+                        </div>
+                        {inc.descripcion && <div style={{ fontSize: '12px', color: '#666', lineHeight: '1.5', marginBottom: inc.notaReunion ? '6px' : '0', paddingLeft: '16px' }}>{inc.descripcion}</div>}
+                        {inc.notaReunion && <div style={{ background: '#FFFBF0', border: '1px solid #F5E6B0', borderRadius: '8px', padding: '7px 10px', fontSize: '11px', color: '#7A6000', fontStyle: 'italic', marginLeft: '16px' }}>{inc.notaReunion}</div>}
+                      </div>
+                    ))
+                  }
+                  {logs.length > 0 && (
+                    <div style={{ marginTop: '12px', borderTop: '1px solid #F5F5F3', paddingTop: '12px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '600', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Log de cambios</div>
+                      {logs.map(l => (
+                        <div key={l.id} style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #F5F5F3', fontSize: '12px' }}>
+                          <span style={{ padding: '2px 7px', borderRadius: '6px', background: l.accion==='eliminar_incidencia'?'#fef2f2':'#f0f6ff', color: l.accion==='eliminar_incidencia'?'#E24B4A':'#185FA5', fontWeight: '600', flexShrink: 0, fontSize: '10px' }}>
+                            {l.accion === 'eliminar_incidencia' ? 'Eliminó' : 'Editó'}
+                          </span>
+                          <span style={{ flex: 1, color: '#555' }}>{l.datos?.categoria || l.datos?.descripcionAnterior?.slice(0,40)}{l.datos?.motivo ? ` · "${l.datos.motivo}"` : ''}</span>
+                          <span style={{ color: '#aaa', flexShrink: 0 }}>{l.usuarioNombre}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+function ModalIniciarTurno({ onConfirm, onClose }) {
+  const hoy = new Date().toISOString().slice(0,10)
+  const [fecha, setFecha] = useState(hoy)
+  const [saving, setSaving] = useState(false)
+
+  async function confirmar() {
+    setSaving(true)
+    await onConfirm(fecha)
+    setSaving(false)
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '360px', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '28px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ fontSize: '18px', fontWeight: '700', color: '#111', marginBottom: '6px' }}>Iniciar turno</div>
+        <div style={{ fontSize: '13px', color: '#aaa', marginBottom: '20px' }}>¿Para qué fecha es este turno?</div>
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Fecha de inicio del turno</div>
+          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ width: '100%', fontSize: '14px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '10px 12px' }} />
+        </div>
+        <div style={{ background: '#f0f6ff', border: '1px solid #b5d4f4', borderRadius: '10px', padding: '10px 14px', fontSize: '12px', color: '#185FA5', marginBottom: '20px' }}>
+          El turno puede extenderse más allá de la medianoche — las incidencias quedan bajo esta fecha.
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
+          <button onClick={confirmar} disabled={saving||!fecha} style={{ flex: 2, padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: '#1D9E75', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving?'Iniciando...':'Iniciar turno'}</button>
         </div>
       </div>
     </>
