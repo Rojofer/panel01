@@ -4,11 +4,13 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import Login from './Login'
 import Tablero from './Tablero'
+import Informe from './Informe'
 
 export default function App() {
   const [user, setUser] = useState(null)
   const [userData, setUserData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [vistaInforme, setVistaInforme] = useState(false)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -38,5 +40,7 @@ export default function App() {
 
   if (!user) return <Login />
 
-  return <Tablero user={user} userData={userData} />
+  if (vistaInforme) return <Informe onVolver={() => setVistaInforme(false)} />
+
+  return <Tablero user={user} userData={userData} onVerInforme={() => setVistaInforme(true)} />
 }
