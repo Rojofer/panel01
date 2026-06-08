@@ -200,15 +200,16 @@ export default function Informe({ onVolver }) {
   const incsChica  = incsPorSala('chica')
 
   function tiempoPerdidoSala(incs) {
-    return incs.reduce((a,i) => a + minutos(i.horaInicio, i.horaFin), 0)
+    return incs.filter(i => i.grado !== 'informativo').reduce((a,i) => a + minutos(i.horaInicio, i.horaFin), 0)
   }
 
   const tiempoGrande = tiempoPerdidoSala(incsGrande)
   const tiempoChica  = tiempoPerdidoSala(incsChica)
-  const tiempoTotal  = incidencias.reduce((a,i) => a + minutos(i.horaInicio, i.horaFin), 0)
+  const tiempoTotal  = incidencias.reduce((a,i) => i.grado === 'informativo' ? a : a + minutos(i.horaInicio, i.horaFin), 0)
 
   // tiempo por categoría (todas las incidencias)
   const tiempoPorCat = incidencias.reduce((acc,i) => {
+    if (i.grado === 'informativo') return acc
     if (i.categoriaNombre) {
       acc[i.categoriaNombre] = (acc[i.categoriaNombre] || 0) + minutos(i.horaInicio, i.horaFin)
     }
