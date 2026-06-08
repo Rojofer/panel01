@@ -70,6 +70,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const franjasFiltradas = franjas.filter(f => incsFiltradas.filter(i=>i.franja===f).length > 0)
 
   const tiempoPorCategoria = activas.reduce((acc, i) => {
+    if (i.grado === 'informativo') return acc
     if (i.horaInicio && i.horaFin && i.categoriaNombre) {
       const [h1,m1] = i.horaInicio.split(':').map(Number)
       const [h2,m2] = i.horaFin.split(':').map(Number)
