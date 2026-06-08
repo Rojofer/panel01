@@ -112,6 +112,11 @@ export default function Tablero({ user, userData, onVerInforme }) {
       <div style={{ background: '#fff', borderBottom: '1px solid #EFEFED', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px', position: 'sticky', top: 0, zIndex: 5 }}>
         <span style={{ fontSize: '16px', fontWeight: '700', color: '#111' }}>Panel de Control</span>
         <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#EDFBF4', color: '#1D9E75', fontWeight: '600' }}>Turno activo</span>
+        {turnoExiste && (
+          <button onClick={() => setDrawerOpen('elegir')}
+            style={{ width: '30px', height: '30px', borderRadius: '50%', border: 'none', background: '#185FA5', color: '#fff', fontSize: '20px', fontWeight: '300', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}
+            title="Registrar incidencia">+</button>
+        )}
         {hayFiltros && (
           <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
             {gradoFiltro && <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: gradoBg[gradoFiltro], color: gradoColor[gradoFiltro], fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>{gradoLabel[gradoFiltro]} <span onClick={() => setGradoFiltro(null)} style={{ cursor: 'pointer', opacity: .7 }}>×</span></span>}
@@ -184,21 +189,13 @@ export default function Tablero({ user, userData, onVerInforme }) {
             </div>
           </div>
 
-          {!turnoExiste ? (
+          {!turnoExiste && (
             <div onClick={() => setModalIniciarTurno(true)}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px solid #1D9E75', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
               onMouseEnter={e => e.currentTarget.style.background='#edfbf4'}
               onMouseLeave={e => e.currentTarget.style.background='#fff'}>
               <span style={{ fontSize: '24px', fontWeight: '300', color: '#1D9E75', lineHeight: 1 }}>▶</span>
               <span style={{ fontSize: '14px', fontWeight: '600', color: '#1D9E75' }}>Iniciar turno de hoy</span>
-            </div>
-          ) : (
-            <div onClick={() => setDrawerOpen('elegir')}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px dashed #d0d0d0', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor='#185FA5'; e.currentTarget.style.background='#f8fbff' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor='#d0d0d0'; e.currentTarget.style.background='#fff' }}>
-              <span style={{ fontSize: '24px', fontWeight: '300', color: '#185FA5', lineHeight: 1 }}>+</span>
-              <span style={{ fontSize: '14px', fontWeight: '600', color: '#185FA5' }}>Registrar incidencia</span>
             </div>
           )}
           
