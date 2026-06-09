@@ -28,6 +28,9 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [modalConfig, setModalConfig] = useState(false)
   const [panelProduccion, setPanelProduccion] = useState(false)
   const [horaActual, setHoraActual] = useState('')
+  const [produccion, setProduccion] = useState({})
+  const [graficosExpandido, setGraficosExpandido] = useState(false)
+  const [incidenciasExpandido, setIncidenciasExpandido] = useState(true)
 
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
@@ -98,6 +101,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const franjasFiltradas = franjas.filter(f => incsFiltradas.filter(i=>i.franja===f).length > 0)
 
   const tiempoPorCategoria = activas.reduce((acc, i) => {
+    if (i.grado === 'informativo') return acc
     if (i.horaInicio && i.horaFin && i.categoriaNombre) {
       const [h1,m1] = i.horaInicio.split(':').map(Number)
       const [h2,m2] = i.horaFin.split(':').map(Number)
@@ -134,122 +138,190 @@ export default function Tablero({ user, userData, onVerInforme }) {
   }
 
   const hayFiltros = sectorFiltro || gradoFiltro
+  const semana = (() => { const d = new Date(); const s = new Date(d.getFullYear(), 0, 1); return Math.ceil(((d - s) / 86400000 + s.getDay() + 1) / 7) })()
+  const objG = config?.objetivoGrande || 350
+  const objC = config?.objetivoChica || 100
 
   return (
-    <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', background: '#F7F7F5', minHeight: '100vh' }}>
-      <div style={{ background: '#fff', borderBottom: '1px solid #EFEFED', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px', position: 'sticky', top: 0, zIndex: 5 }}>
-        <span style={{ fontSize: '16px', fontWeight: '700', color: '#111' }}>Panel de Control</span>
-        <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#EDFBF4', color: '#1D9E75', fontWeight: '600' }}>Turno activo</span>
+    <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', background: '#F4F4F1', minHeight: '100vh' }}>
+
+      {/* ── HEADER ── */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #E8E8E5', padding: '0 20px', height: '54px', display: 'flex', alignItems: 'center', gap: '12px', position: 'sticky', top: 0, zIndex: 5, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', color: '#fff', borderRadius: '7px', padding: '3px 7px', lineHeight: 1 }}>
+            <span style={{ fontSize: '7px', fontWeight: '600', letterSpacing: '.1em', opacity: .6, textTransform: 'uppercase' }}>SEM</span>
+            <span style={{ fontSize: '16px', fontWeight: '800' }}>{semana}</span>
+          </div>
+          <span style={{ fontSize: '26px', fontWeight: '700', color: '#111', letterSpacing: '-1px', lineHeight: 1 }}>{horaActual}</span>
+          <span style={{ fontSize: '11px', color: '#bbb' }}>{config?.inicio || '05:00'} — {config?.fin || '14:00'}</span>
+        </div>
+        {turnoExiste && <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: '#EDFBF4', color: '#1D9E75', fontWeight: '700', letterSpacing: '.04em', textTransform: 'uppercase', flexShrink: 0 }}>Turno activo</span>}
         {turnoExiste && (
-          <button onClick={() => setDrawerOpen('elegir')}
-            style={{ width: '30px', height: '30px', borderRadius: '50%', border: 'none', background: '#185FA5', color: '#fff', fontSize: '20px', fontWeight: '300', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}
-            title="Registrar incidencia">+</button>
+          <button onClick={() => setDrawerOpen('elegir')} title="Registrar incidencia"
+            style={{ width: '30px', height: '30px', borderRadius: '50%', border: 'none', background: '#185FA5', color: '#fff', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0, boxShadow: '0 2px 6px rgba(24,95,165,0.3)' }}>+</button>
         )}
         {hayFiltros && (
-          <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-            {gradoFiltro && <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: gradoBg[gradoFiltro], color: gradoColor[gradoFiltro], fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>{gradoLabel[gradoFiltro]} <span onClick={() => setGradoFiltro(null)} style={{ cursor: 'pointer', opacity: .7 }}>×</span></span>}
-            {sectorFiltro && <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>{sectorFiltro} <span onClick={() => setSectorFiltro(null)} style={{ cursor: 'pointer', opacity: .7 }}>×</span></span>}
+          <div style={{ display: 'flex', gap: '4px' }}>
+            {gradoFiltro && <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: gradoBg[gradoFiltro], color: gradoColor[gradoFiltro], fontWeight: '700', display: 'flex', alignItems: 'center', gap: '3px' }}>{gradoLabel[gradoFiltro]} <span onClick={() => setGradoFiltro(null)} style={{ cursor: 'pointer', opacity: .6 }}>×</span></span>}
+            {sectorFiltro && <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '3px' }}>{sectorFiltro} <span onClick={() => setSectorFiltro(null)} style={{ cursor: 'pointer', opacity: .6 }}>×</span></span>}
           </div>
         )}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <span style={{ fontSize: '24px', fontWeight: '700', color: '#111', letterSpacing: '-0.5px' }}>{horaActual}</span>
-          <span style={{ fontSize: '12px', color: '#aaa' }}>{config?.inicio || '05:00'} — {config?.fin || '14:00'}</span>
-          {turnoExiste && (
-            <button onClick={() => { if(window.confirm('¿Cerrar el turno? No podrás agregar más incidencias.')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '600' }}>⏹ Cerrar turno</button>
-          )}
-          <button onClick={() => setPanelProduccion(true)} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>📦 Producción</button>
-          <button onClick={() => setModalHistorial(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📋 Historial</button>
-          {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>⚙️ Config</button>}
-          {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📊 Informes</button>}
-          <button onClick={() => signOut(auth)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#888' }}>Salir</button>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '5px', alignItems: 'center' }}>
+          {turnoExiste && <button onClick={() => { if(window.confirm('¿Cerrar el turno?')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '600' }}>⏹ Cerrar turno</button>}
+          <button onClick={() => setPanelProduccion(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📦 Producción</button>
+          <button onClick={() => setModalHistorial(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📋 Historial</button>
+          {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>⚙️ Config</button>}
+          {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📊 Informes</button>}
+          <button onClick={() => signOut(auth)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#999' }}>Salir</button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 280px' : '1fr', gap: '16px', padding: '16px 24px' }}>
-        <div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-            <div style={{ background: '#fff', borderRadius: '14px', padding: '14px 16px', border: '1px solid #EFEFED' }}>
-              <div style={{ fontSize: '11px', color: '#aaa', fontWeight: '500', marginBottom: '4px' }}>Incidencias del turno</div>
-              <div style={{ fontSize: '28px', fontWeight: '700', color: '#E24B4A', lineHeight: 1, marginBottom: '10px' }}>
-                {incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '14px', color: '#aaa', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}
+      {/* ── BODY ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 260px' : '1fr', minHeight: 'calc(100vh - 54px)' }}>
+        <div style={{ borderRight: sectoresConInc.length > 0 ? '1px solid #E8E8E5' : 'none' }}>
+
+          {/* KPIs */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1px', background: '#E8E8E5', borderBottom: '1px solid #E8E8E5' }}>
+
+            {/* incidencias */}
+            <div style={{ background: '#fff', padding: '14px 18px' }}>
+              <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Incidencias del turno</div>
+              <div style={{ fontSize: '32px', fontWeight: '800', color: '#E24B4A', lineHeight: 1, marginBottom: '10px' }}>
+                {incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '13px', color: '#bbb', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}
               </div>
-              {activas.length > 0 && (
-                <div style={{ height: '8px', borderRadius: '4px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '10px' }}>
-                  {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && (
-                    <div key={g} onClick={() => toggleGrado(g)} style={{ height: '100%', background: gradoColor[g], width: `${Math.round(gradoCount[g]/activas.length*100)}%`, borderRadius: '2px', cursor: 'pointer', opacity: gradoFiltro && gradoFiltro !== g ? 0.3 : 1, transition: 'opacity .15s' }} />
-                  ))}
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && (
-                  <span key={g} onClick={() => toggleGrado(g)} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '20px', background: gradoBg[g], color: gradoColor[g], fontWeight: '600', cursor: 'pointer', border: `1.5px solid ${gradoFiltro === g ? gradoColor[g] : 'transparent'}`, opacity: gradoFiltro && gradoFiltro !== g ? 0.4 : 1, transition: 'all .15s' }}>
-                    {gradoCount[g]} {gradoLabel[g]}{gradoCount[g] > 1 ? 's' : ''}
-                  </span>
-                ))}
+              {activas.length > 0 && <div style={{ height: '5px', borderRadius: '3px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '8px' }}>
+                {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && <div key={g} onClick={() => toggleGrado(g)} style={{ height: '100%', background: gradoColor[g], width: `${Math.round(gradoCount[g]/activas.length*100)}%`, borderRadius: '2px', cursor: 'pointer', opacity: gradoFiltro && gradoFiltro !== g ? 0.25 : 1 }} />)}
+              </div>}
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && <span key={g} onClick={() => toggleGrado(g)} style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: gradoBg[g], color: gradoColor[g], fontWeight: '700', cursor: 'pointer', border: `1.5px solid ${gradoFiltro === g ? gradoColor[g] : 'transparent'}`, opacity: gradoFiltro && gradoFiltro !== g ? 0.35 : 1 }}>{gradoCount[g]} {gradoLabel[g]}{gradoCount[g] > 1 ? 's' : ''}</span>)}
               </div>
             </div>
 
-            <div style={{ background: '#fff', borderRadius: '14px', padding: '14px 16px', border: '1px solid #EFEFED' }}>
-              <div style={{ fontSize: '11px', color: '#aaa', fontWeight: '500', marginBottom: '4px' }}>Tiempo perdido</div>
-              <div style={{ fontSize: '28px', fontWeight: '700', color: '#BA7517', lineHeight: 1, marginBottom: '10px' }}>
-                {tiempoTotal > 0 ? tiempoTotal : '—'}{tiempoTotal > 0 && <span style={{ fontSize: '16px', fontWeight: '500', marginLeft: '4px' }}>min</span>}
+            {/* tiempo perdido */}
+            <div style={{ background: '#fff', padding: '14px 18px' }}>
+              <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Tiempo perdido</div>
+              <div style={{ fontSize: '32px', fontWeight: '800', color: tiempoTotal > 0 ? '#BA7517' : '#ddd', lineHeight: 1, marginBottom: '10px' }}>
+                {tiempoTotal > 0 ? <>{tiempoTotal}<span style={{ fontSize: '13px', fontWeight: '500', marginLeft: '3px' }}>min</span></> : '—'}
               </div>
               {tiempoTotal > 0 ? (
                 <>
-                  <div style={{ height: '8px', borderRadius: '4px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '10px' }}>
-                    {tiempoOrdenado.map(([cat, mins], idx) => (
-                      <div key={cat} style={{ height: '100%', background: catColores[idx], width: `${Math.round(mins/tiempoTotal*100)}%`, borderRadius: '2px' }} title={`${cat}: ${mins} min`} />
-                    ))}
+                  <div style={{ height: '5px', borderRadius: '3px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '8px' }}>
+                    {tiempoOrdenado.map(([cat, mins], idx) => <div key={cat} style={{ height: '100%', background: catColores[idx], width: `${Math.round(mins/tiempoTotal*100)}%`, borderRadius: '2px' }} />)}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     {tiempoOrdenado.map(([cat, mins], idx) => (
-                      <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#555' }}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: catColores[idx], flexShrink: 0 }} />
+                      <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10px', color: '#555' }}>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: catColores[idx], flexShrink: 0 }} />
                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
-                        <span style={{ fontWeight: '600', color: '#333' }}>{mins} min</span>
+                        <span style={{ fontWeight: '700', color: '#333' }}>{mins}m</span>
                       </div>
                     ))}
                   </div>
                 </>
-              ) : (
-                <div style={{ fontSize: '11px', color: '#ccc' }}>Registrá hora de fin en las incidencias para ver el tiempo</div>
-              )}
+              ) : <div style={{ fontSize: '10px', color: '#ccc' }}>Registrá hora de fin para ver el tiempo</div>}
+            </div>
+
+            {/* total producido */}
+            <div style={{ background: '#fff', padding: '14px 18px' }}>
+              <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Total producido</div>
+              {(() => {
+                const totalG = Object.values(produccion).reduce((a,p) => a + (p.grande || 0), 0)
+                const totalC = Object.values(produccion).reduce((a,p) => a + (p.chica || 0), 0)
+                const total = totalG + totalC
+                const franjasProd = config ? generarFranjas(config) : []
+                const objTotal = (objG + objC) * franjasProd.length
+                const pct = objTotal > 0 ? Math.round(total / objTotal * 100) : 0
+                const delta = total - objTotal
+                return total > 0 ? (
+                  <>
+                    <div style={{ fontSize: '32px', fontWeight: '800', color: '#111', lineHeight: 1, marginBottom: '6px' }}>{total.toLocaleString('es-AR')}</div>
+                    <div style={{ fontSize: '10px', color: '#bbb', marginBottom: '6px' }}>de {objTotal.toLocaleString('es-AR')} objetivo</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '18px', fontWeight: '800', color: pct >= 100 ? '#1D9E75' : '#E24B4A' }}>{pct}%</span>
+                      <span style={{ fontSize: '10px', color: pct >= 100 ? '#1D9E75' : '#E24B4A', fontWeight: '700' }}>{delta >= 0 ? '+' : ''}{delta.toLocaleString('es-AR')} cuartos</span>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: '32px', fontWeight: '800', color: '#ddd', lineHeight: 1 }}>—</div>
+                )
+              })()}
             </div>
           </div>
 
+          {/* iniciar turno */}
           {!turnoExiste && (
-            <div onClick={() => setModalIniciarTurno(true)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px solid #1D9E75', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
+            <div onClick={() => setModalIniciarTurno(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', borderBottom: '1px solid #E8E8E5', padding: '14px', cursor: 'pointer' }}
               onMouseEnter={e => e.currentTarget.style.background='#edfbf4'}
               onMouseLeave={e => e.currentTarget.style.background='#fff'}>
-              <span style={{ fontSize: '24px', fontWeight: '300', color: '#1D9E75', lineHeight: 1 }}>▶</span>
-              <span style={{ fontSize: '14px', fontWeight: '600', color: '#1D9E75' }}>Iniciar turno de hoy</span>
-            </div>
-          )}
-          
-          {franjasFiltradas.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#ccc', fontSize: '14px' }}>
-              {hayFiltros ? 'Sin incidencias con los filtros aplicados' : 'Sin incidencias registradas en el turno'}
+              <span style={{ fontSize: '18px', color: '#1D9E75' }}>▶</span>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#1D9E75' }}>Iniciar turno de hoy</span>
             </div>
           )}
 
-          {franjasFiltradas.map(franja => (
-            <div key={franja}>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px', paddingLeft: '2px' }}>
-                {franja.replace('-', ' — ')}
+          {/* gráficos hora a hora — colapsable */}
+          {turnoExiste && (
+            <div style={{ borderBottom: '1px solid #E8E8E5' }}>
+              <div onClick={() => setGraficosExpandido(!graficosExpandido)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', cursor: 'pointer', background: '#fff', userSelect: 'none' }}
+                onMouseEnter={e => e.currentTarget.style.background='#FAFAF8'}
+                onMouseLeave={e => e.currentTarget.style.background='#fff'}>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '.08em' }}>Producción hora a hora</span>
+                <span style={{ fontSize: '10px', color: '#ccc', transform: graficosExpandido ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform .2s' }}>▼</span>
               </div>
-              {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
-                <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id === ultimaIncId} />
-              ))}
+              {graficosExpandido && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#fff', padding: '0 0 12px 0' }}>
+                  {[{ label: 'Sala grande', sala: 'grande', obj: objG }, { label: 'Sala chica', sala: 'chica', obj: objC }].map(({ label, sala, obj }) => (
+                    <div key={sala} style={{ padding: '10px 16px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '4px' }}>{label}</div>
+                      <GraficoHoraAHora franjas={config ? generarFranjas(config) : []} produccion={produccion} objetivo={obj} config={config} sala={sala} />
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '2px' }}>
+                        {[['#1D9E75','Sobre obj.'],['#E24B4A','Bajo obj.'],['#B0B0A8','Descanso']].map(([c,t]) => (
+                          <span key={t} style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '9px', color: '#aaa' }}>
+                            <span style={{ width: '7px', height: '7px', borderRadius: '2px', background: c, display: 'inline-block' }} />{t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          ))}
+          )}
+
+          {/* incidencias — colapsable */}
+          <div>
+            <div onClick={() => setIncidenciasExpandido(!incidenciasExpandido)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', cursor: 'pointer', background: '#fff', borderBottom: '1px solid #E8E8E5', userSelect: 'none' }}
+              onMouseEnter={e => e.currentTarget.style.background='#FAFAF8'}
+              onMouseLeave={e => e.currentTarget.style.background='#fff'}>
+              <span style={{ fontSize: '10px', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                Incidencias {hayFiltros ? `(${incsFiltradas.length} filtradas)` : `(${activas.length})`}
+              </span>
+              <span style={{ fontSize: '10px', color: '#ccc', transform: incidenciasExpandido ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform .2s' }}>▼</span>
+            </div>
+            {incidenciasExpandido && (
+              <div style={{ padding: '12px 18px' }}>
+                {franjasFiltradas.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '2.5rem', color: '#ccc', fontSize: '13px' }}>
+                    {hayFiltros ? 'Sin incidencias con los filtros aplicados' : 'Sin incidencias registradas en el turno'}
+                  </div>
+                ) : franjasFiltradas.map(franja => (
+                  <div key={franja} style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '6px' }}>
+                      {franja.replace('-', ' — ')}
+                    </div>
+                    {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
+                      <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id === ultimaIncId} />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* panel sectores */}
         {sectoresConInc.length > 0 && (
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>
-              Sectores · click filtra · doble click detalle
-            </div>
+          <div style={{ padding: '16px 14px' }}>
+            <div style={{ fontSize: '9px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '10px' }}>Sectores · click filtra · doble click detalle</div>
             {sectoresConInc.map(s => (
               <SectorCard key={s} sector={s} incs={activas.filter(i => i.sectoresResponsables?.includes(s))} seleccionado={sectorFiltro === s} onClick={() => toggleSector(s)} onDobleClick={() => setSectorDetalle(s)} />
             ))}
@@ -284,6 +356,77 @@ export default function Tablero({ user, userData, onVerInforme }) {
         />
       )}
     </div>
+  )
+}
+
+
+function getDescansoParcial(franja, config) {
+  if (!config) return 0
+  const hFranja = parseInt(franja.split(':')[0])
+  let minDesc = 0
+  for (const d of [
+    { hora: config.descanso1Hora, min: config.descanso1Min || 0, dur: config.descanso1Dur || 0 },
+    { hora: config.descanso2Hora, min: config.descanso2Min || 0, dur: config.descanso2Dur || 0 },
+  ]) {
+    if (d.hora === undefined || d.dur === 0) continue
+    const dIni = d.hora * 60 + d.min
+    const dFin = dIni + d.dur
+    const fIni = hFranja * 60
+    const fFin = fIni + 60
+    minDesc += Math.max(0, Math.min(dFin, fFin) - Math.max(dIni, fIni))
+  }
+  return minDesc
+}
+
+function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala }) {
+  const W = 500, H = 160, PT = 26, PB = 34, PX = 4
+  const n = franjas.length
+  if (n === 0) return null
+  const slot = (W - PX * 2) / n
+  const barW = Math.max(10, Math.floor(slot) - 4)
+  const chartH = H - PT - PB
+
+  function objFranja(franja) {
+    const mDesc = getDescansoParcial(franja, config)
+    return Math.round(objetivo * (60 - mDesc) / 60)
+  }
+
+  const vals = franjas.map(f => produccion[f]?.[sala]).filter(v => v != null)
+  const maxVal = Math.max(...franjas.map(f => objFranja(f)), ...vals, 1) * 1.35
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      {franjas.map((franja, i) => {
+        const x = PX + i * slot
+        const xc = x + slot / 2
+        const mDesc = getDescansoParcial(franja, config)
+        const objF = objFranja(franja)
+        const yObj = PT + chartH - Math.round((objF / maxVal) * chartH)
+        const val = produccion[franja]?.[sala]
+        const hora = franja.split(':')[0].replace(/^0/, '')
+        const lineEl = <line key={`l${i}`} x1={x+1} y1={yObj} x2={x+barW+1} y2={yObj} stroke="#C8B89A" strokeWidth="1.2" strokeDasharray="3 2" />
+        if (val == null) return (
+          <g key={franja}>{lineEl}
+            <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="10" fill="#CCC" fontFamily="system-ui">{hora}</text>
+          </g>
+        )
+        const sobre = val >= objF
+        const color = sobre ? '#1D9E75' : '#E24B4A'
+        const bH = Math.max(6, Math.round((val / maxVal) * chartH))
+        const delta = val - objF
+        const overlayH = Math.round(bH * (mDesc / 60))
+        return (
+          <g key={franja}>
+            {lineEl}
+            <rect x={x+2} y={PT+chartH-bH} width={barW} height={bH} fill={color} rx="3" opacity=".88" />
+            {mDesc > 0 && overlayH > 0 && <rect x={x+2} y={PT+chartH-bH} width={barW} height={overlayH} fill="#B0B0A8" rx="3" opacity=".75" />}
+            <text x={xc} y={PT+chartH-bH-5} textAnchor="middle" fontSize="11" fill={color} fontWeight="700" fontFamily="system-ui">{val}</text>
+            <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="10" fill="#888" fontFamily="system-ui">{hora}</text>
+            <text x={xc} y={H-PB+24} textAnchor="middle" fontSize="9" fill={sobre?'#1D9E75':'#E24B4A'} fontWeight="700" fontFamily="system-ui">{delta>=0?`+${delta}`:delta}</text>
+          </g>
+        )
+      })}
+    </svg>
   )
 }
 
