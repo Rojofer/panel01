@@ -259,26 +259,26 @@ export default function Tablero({ user, userData, onVerInforme }) {
                 <span style={{ fontSize: '10px', color: '#ccc', transform: graficosExpandido ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform .2s' }}>▼</span>
               </div>
               {graficosExpandido && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#fff', padding: '0 0 12px 0' }}>
-                  {[{ label: 'Sala grande', sala: 'grande', obj: objG }, { label: 'Sala chica', sala: 'chica', obj: objC }].map(({ label, sala, obj }) => (
-                    <div key={sala} style={{ padding: '10px 16px' }}>
-                      <GraficoHoraAHora
-                        franjas={config ? generarFranjas(config) : []}
-                        produccion={produccion}
-                        objetivo={obj}
-                        config={config}
-                        sala={sala}
-                        incidencias={activas}
-                        label={label}
-                        franjaSeleccionada={franjaGrafico}
-                        onSelectFranja={f => setFranjaGrafico(prev => prev === f ? null : f)}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                {/* panel sin sala */}
-                {franjaGrafico && <PanelSinSala franja={franjaGrafico} incidencias={activas} onClose={() => setFranjaGrafico(null)} />}
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#fff', padding: '0 0 12px 0' }}>
+                    {[{ label: 'Sala grande', sala: 'grande', obj: objG }, { label: 'Sala chica', sala: 'chica', obj: objC }].map(({ label, sala, obj }) => (
+                      <div key={sala} style={{ padding: '10px 16px' }}>
+                        <GraficoHoraAHora
+                          franjas={config ? generarFranjas(config) : []}
+                          produccion={produccion}
+                          objetivo={obj}
+                          config={config}
+                          sala={sala}
+                          incidencias={activas}
+                          label={label}
+                          franjaSeleccionada={franjaGrafico}
+                          onSelectFranja={f => setFranjaGrafico(prev => prev === f ? null : f)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {franjaGrafico && <PanelSinSala franja={franjaGrafico} incidencias={activas} onClose={() => setFranjaGrafico(null)} />}
+                </>
               )}
             </div>
           )}
