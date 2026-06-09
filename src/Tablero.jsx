@@ -358,7 +358,7 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
   }))
 
   // Calcular total minutos de descanso del turno
-  const totalDescMinutos = franjas.reduce((sum, f) => sum + getDescansoParcial(f, config, descSala), 0)
+  const totalDescMinutos = franjaSeleccionada ? getDescansoParcial(franjaSeleccionada, config, descSala) : franjas.reduce((sum, f) => sum + getDescansoParcial(f, config, descSala), 0)
   const descHoras = Math.floor(totalDescMinutos / 60)
   const descMins = totalDescMinutos % 60
   const descLabel = totalDescMinutos > 0 ? (descHoras > 0 ? `${descHoras}h ${descMins > 0 ? descMins+'m' : ''}` : `${descMins}m`) : null
