@@ -357,7 +357,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
 
 
 function getDescansoParcial(franja, config) {
-  if (!config) return 0
+  if (!config || !franja) return 0
   const hFranja = parseInt(franja.split(':')[0])
   let minDesc = 0
   for (const d of [
@@ -401,8 +401,8 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
     ? (incidencias || []).filter(i => i.franja === franjaSeleccionada && (i.sala === sala || i.sala === 'ambas'))
     : []
 
-  function handleBarClick(franja) {
-    setFranjaSeleccionada(prev => prev === franja ? null : franja)
+  function handleBarClick(f) {
+    if (onSelectFranja) onSelectFranja(f)
   }
 
   return (
@@ -425,7 +425,7 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
           const objF = objFranja(franja)
           const yObj = PT + chartH - Math.round((objF / maxVal) * chartH)
           const val = produccion[franja]?.[sala]
-          const hora = franja.split(':')[0].replace(/^0/, '')
+          const hora = (franja || '').split(':')[0].replace(/^0/, '')
           const seleccionada = franjaSeleccionada === franja
           const tieneIncs = (incidencias || []).some(i => i.franja === franja && (i.sala === sala || i.sala === 'ambas'))
 
