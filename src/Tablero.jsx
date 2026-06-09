@@ -38,29 +38,22 @@ export default function Tablero({ user, userData, onVerInforme }) {
   }, [])
 
   useEffect(() => {
-    // Buscar turno activo de hoy — primero intenta con _manana, si no existe busca cualquier turno activo de hoy
+    // Buscar el turno de hoy — por fecha, sin importar estado
     const hoy = new Date()
-    const fechaStr = hoy.toISOString().slice(0,10) // "2026-06-08"
-    const idBase = fechaStr.replace(/-/g,'') // "20260608"
-    const idManana = idBase + '_manana'
+    const fechaStr = hoy.toISOString().slice(0,10)
+    const idManana = fechaStr.replace(/-/g,'') + '_manana'
 
-    getDoc(doc(db,'turnos',idManana)).then(s => {
-      if (s.exists()) {
-        setTurnoId(idManana)
+    getDocs(collection(db,'turnos')).then(snap => {
+      // Buscar cualquier turno de hoy (activo o cerrado), el más reciente
+      const turnosHoy = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(t => t.fecha === fechaStr)
+        .sort((a,b) => b.id.localeCompare(a.id))
+
+      if (turnosHoy.length > 0) {
+        setTurnoId(turnosHoy[0].id)
       } else {
-        // Buscar en todos los turnos uno activo con fecha de hoy
-        getDocs(collection(db,'turnos')).then(snap => {
-          const turnoHoy = snap.docs.find(d => {
-            const data = d.data()
-            return data.fecha === fechaStr && data.estado === 'activo'
-          })
-          if (turnoHoy) {
-            setTurnoId(turnoHoy.id)
-          } else {
-            // Usar el ID por defecto igual (para que ModalIniciarTurno lo cree con ese ID)
-            setTurnoId(idManana)
-          }
-        })
+        setTurnoId(idManana)
       }
     })
   }, [])
