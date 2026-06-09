@@ -36,8 +36,8 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [primerIngresoChica,  setPrimerIngresoChica]  = useState('')
   const [ultimoIngresoGrande, setUltimoIngresoGrande] = useState('')
   const [ultimoIngresoChica,  setUltimoIngresoChica]  = useState('')
-  const [descGrande, setDescGrande] = useState(null)
-  const [descChica,  setDescChica]  = useState(null)
+  const [descGrande, setDescGrande] = useState([])
+  const [descChica,  setDescChica]  = useState([])
 
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
@@ -84,8 +84,8 @@ export default function Tablero({ user, userData, onVerInforme }) {
         if (d.primerIngresoChica)  setPrimerIngresoChica(d.primerIngresoChica)
         if (d.ultimoIngresoGrande) setUltimoIngresoGrande(d.ultimoIngresoGrande)
         if (d.ultimoIngresoChica)  setUltimoIngresoChica(d.ultimoIngresoChica)
-        if (d.descansoGrandeHora !== undefined) setDescGrande({ hora: d.descansoGrandeHora, min: d.descansoGrandeMin || 0, dur: d.descansoGrandeDur || 0 })
-        if (d.descansoChicaHora  !== undefined) setDescChica ({ hora: d.descansoChicaHora,  min: d.descansoChicaMin  || 0, dur: d.descansoChicaDur  || 0 })
+        if (d.descansosGrande) setDescGrande(d.descansosGrande)
+        if (d.descansosChica)  setDescChica(d.descansosChica)
       }
     })
     return unsub
@@ -293,11 +293,13 @@ export default function Tablero({ user, userData, onVerInforme }) {
 
 
 function getDescansoParcial(franja, config, descSala) {
+  // descSala: array de {hora, min, dur} — override por sala
+  // si no, usa el config global (descanso1* y descanso2*)
   if (!franja) return 0
   const hFranja = parseInt(franja.split(':')[0])
   let minDesc = 0
-  const descansos = descSala
-    ? [descSala]
+  const descansos = (descSala && descSala.length > 0)
+    ? descSala
     : config ? [
         { hora: config.descanso1Hora, min: config.descanso1Min || 0, dur: config.descanso1Dur || 0 },
         { hora: config.descanso2Hora, min: config.descanso2Min || 0, dur: config.descanso2Dur || 0 },
