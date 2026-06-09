@@ -627,62 +627,257 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) 
 
 function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) {
   const [grado, setGrado] = useState(inc.grado)
-  const [descripcion, setDescripcion] = useState(inc.descripcion)
+  const [descripcion, setDescripcion] = useState(inc.descripcion || '')
   const [categoria, setCategoria] = useState(inc.categoriaId)
   const [categoriaNombre, setCategoriaNombre] = useState(inc.categoriaNombre)
   const [responsables, setResponsables] = useState(inc.sectoresResponsables || [])
-  const [busq, setBusq] = useState('')
+  const [afectados, setAfectados] = useState(inc.sectoresAfectados || [])
+  const [causaExterna, setCausaExterna] = useState(inc.causaExterna || false)
+  const [sala, setSala] = useState(inc.sala || '')
+  const [lineas, setLineas] = useState(inc.lineas || [])
+  const [horaInicio, setHoraInicio] = useState(inc.horaInicio || '')
+  const [horaFin, setHoraFin] = useState(inc.horaFin || '')
+  const [franja, setFranja] = useState(inc.franja || '')
+  const [etiquetas, setEtiquetas] = useState(inc.etiquetas || [])
+  const [tagInput, setTagInput] = useState('')
+  const [busqResp, setBusqResp] = useState('')
+  const [busqAfect, setBusqAfect] = useState('')
+  const [busqCat, setBusqCat] = useState('')
+  const [catOpen, setCatOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  const lineasOpts = sala === 'chica' ? ['L5'] : ['L2','L3','L4']
+  const catsFiltradas = categorias.filter(c => c.nombre.toLowerCase().includes(busqCat.toLowerCase()))
+
+  function toggleLinea(l) { setLineas(p => p.includes(l) ? p.filter(x => x !== l) : [...p, l]) }
+  function addTag() { if (!tagInput.trim()) return; setEtiquetas(p => [...p, tagInput.trim()]); setTagInput('') }
+
+  function BuscadorSector({ seleccionados, setSeleccionados, busq, setBusq, placeholder }) {
+    const filtrados = busq.length > 0 ? sectores.filter(s => s.toLowerCase().includes(busq.toLowerCase())) : []
+    return (
+      <div>
+        <div style={{ position: 'relative' }}>
+          <input value={busq} onChange={e => setBusq(e.target.value)} placeholder={placeholder}
+            style={{ width: '100%', fontSize: '12px', padding: '8px 12px', borderRadius: '9px', border: '1.5px solid #e8e8e8', background: '#fafafa', boxSizing: 'border-box' }} />
+          {busq && <span onClick={() => setBusq('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#bbb' }}>×</span>}
+        </div>
+        {busq.length > 0 && filtrados.length > 0 && (
+          <div style={{ border: '1.5px solid #185FA5', borderRadius: '9px', overflow: 'hidden', marginTop: '4px', maxHeight: '150px', overflowY: 'auto', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+            {filtrados.map(s => (
+              <div key={s} onClick={() => { setSeleccionados(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]); setBusq('') }}
+                style={{ padding: '8px 12px', fontSize: '12px', cursor: 'pointer', background: seleccionados.includes(s) ? '#f0f6ff' : '#fff', borderBottom: '1px solid #f5f5f5', color: seleccionados.includes(s) ? '#185FA5' : '#333', fontWeight: seleccionados.includes(s) ? '600' : '400' }}>
+                {seleccionados.includes(s) ? '✓ ' : ''}{s}
+              </div>
+            ))}
+          </div>
+        )}
+        {seleccionados.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '6px' }}>
+            {seleccionados.map(r => (
+              <span key={r} style={{ fontSize: '11px', padding: '3px 8px 3px 10px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', border: '1px solid #b5d4f4', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {r} <span onClick={() => setSeleccionados(p => p.filter(x => x !== r))} style={{ cursor: 'pointer', opacity: .6 }}>×</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   async function guardar() {
     setSaving(true)
-    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), { grado, descripcion, categoriaId: categoria, categoriaNombre, sectoresResponsables: responsables, editadoPor: userData.nombre, editadoEn: serverTimestamp() })
-    await addDoc(collection(db,'log'), { accion: 'editar_incidencia', turnoId, recursoId: inc.id, usuarioNombre: userData.nombre, datos: { gradoAnterior: inc.grado, descripcionAnterior: inc.descripcion }, timestamp: serverTimestamp() })
+    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), {
+      grado, descripcion, categoriaId: categoria, categoriaNombre,
+      sectoresResponsables: responsables, sectoresAfectados: afectados,
+      causaExterna, sala, lineas, horaInicio, horaFin: horaFin || null,
+      franja, etiquetas,
+      editadoPor: userData.nombre, editadoEn: serverTimestamp()
+    })
+    await addDoc(collection(db,'log'), {
+      accion: 'editar_incidencia', turnoId, recursoId: inc.id,
+      usuarioNombre: userData.nombre,
+      datos: { gradoAnterior: inc.grado, descripcionAnterior: inc.descripcion },
+      timestamp: serverTimestamp()
+    })
     setSaving(false); onClose()
   }
+
+  const lbl = (t, opt) => (
+    <div style={{ fontSize: '11px', fontWeight: '600', color: '#666', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '7px' }}>
+      {t}{opt && <span style={{ fontSize: '10px', color: '#bbb', fontWeight: '400', marginLeft: '5px', textTransform: 'none' }}>opcional</span>}
+    </div>
+  )
 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '440px', maxHeight: '85vh', overflowY: 'auto', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '24px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ fontSize: '17px', fontWeight: '700', color: '#111' }}>Editar incidencia</div>
-          <button onClick={onClose} style={{ width: '30px', height: '30px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', fontSize: '16px', color: '#888' }}>×</button>
-        </div>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Categoría</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-            {categorias.map(c => <button key={c.id} onClick={() => { setCategoria(c.id); setCategoriaNombre(c.nombre) }} style={{ padding: '8px', fontSize: '12px', borderRadius: '8px', border: `1.5px solid ${categoria===c.id?'#185FA5':'#e8e8e8'}`, background: categoria===c.id?'#f0f6ff':'#fafafa', color: categoria===c.id?'#185FA5':'#555', cursor: 'pointer', fontWeight: categoria===c.id?'600':'400' }}>{c.nombre}</button>)}
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '680px', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: '18px', zIndex: 21, fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+
+        {/* header fijo */}
+        <div style={{ padding: '22px 28px 18px', borderBottom: '1px solid #F0F0EE', position: 'sticky', top: 0, background: '#fff', zIndex: 2, borderRadius: '18px 18px 0 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '17px', fontWeight: '700', color: '#111' }}>Editar incidencia</div>
+              <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px' }}>{inc.horaInicio} · {inc.franja?.replace('-',' — ')}</div>
+            </div>
+            <button onClick={onClose} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', fontSize: '18px', color: '#888' }}>×</button>
           </div>
         </div>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Grado</div>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            {Object.entries(gradoColor).map(([g,c]) => <button key={g} onClick={() => setGrado(g)} style={{ flex: 1, padding: '8px 4px', fontSize: '11px', fontWeight: grado===g?'700':'400', borderRadius: '8px', border: `1.5px solid ${grado===g?c:'#e8e8e8'}`, background: grado===g?c+'20':'#fafafa', color: grado===g?c:'#888', cursor: 'pointer' }}>{g}</button>)}
+
+        <div style={{ padding: '22px 28px 28px' }}>
+
+          {/* fila 1: categoría + grado */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+
+            {/* categoría dropdown */}
+            <div>
+              {lbl('Categoría')}
+              <div style={{ position: 'relative' }}>
+                <div onClick={() => setCatOpen(!catOpen)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', border: `1.5px solid ${catOpen ? '#185FA5' : '#e8e8e8'}`, background: '#fff', cursor: 'pointer', fontSize: '13px', color: categoriaNombre ? '#111' : '#bbb' }}>
+                  <span>{categoriaNombre || 'Seleccioná...'}</span>
+                  <span style={{ fontSize: '9px', color: '#bbb', transform: catOpen ? 'rotate(180deg)' : 'none', display: 'inline-block' }}>▼</span>
+                </div>
+                {catOpen && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: '#fff', border: '1.5px solid #185FA5', borderRadius: '10px', marginTop: '4px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+                    <div style={{ padding: '8px' }}>
+                      <input autoFocus value={busqCat} onChange={e => setBusqCat(e.target.value)}
+                        placeholder="Buscar..." style={{ width: '100%', fontSize: '12px', borderRadius: '7px', border: '1px solid #e8e8e8', padding: '6px 10px', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                      {catsFiltradas.map(c => (
+                        <div key={c.id} onClick={() => { setCategoria(c.id); setCategoriaNombre(c.nombre); setCatOpen(false); setBusqCat('') }}
+                          style={{ padding: '8px 14px', fontSize: '13px', cursor: 'pointer', background: categoria === c.id ? '#f0f6ff' : '#fff', color: categoria === c.id ? '#185FA5' : '#333', fontWeight: categoria === c.id ? '600' : '400', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between' }}>
+                          {c.nombre}{categoria === c.id && <span>✓</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* grado */}
+            <div>
+              {lbl('Grado')}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                {Object.entries(gradoColor).map(([g, c]) => (
+                  <button key={g} onClick={() => setGrado(g)}
+                    style={{ padding: '7px 8px', fontSize: '12px', fontWeight: grado === g ? '700' : '400', borderRadius: '8px', border: `1.5px solid ${grado === g ? c : '#e8e8e8'}`, background: grado === g ? c + '18' : '#fafafa', color: grado === g ? c : '#888', cursor: 'pointer', textTransform: 'capitalize' }}>
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Descripción</div>
-          <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} style={{ width: '100%', fontSize: '13px', minHeight: '70px', resize: 'vertical', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '10px 12px', fontFamily: 'inherit' }} />
-        </div>
-        <div style={{ marginBottom: '20px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '8px' }}>Responsables</div>
-          <input value={busq} onChange={e => setBusq(e.target.value)} placeholder="Buscá un sector..." style={{ width: '100%', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '8px 12px', marginBottom: '6px' }} />
-          {busq && <div style={{ border: '1px solid #e8e8e8', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px', maxHeight: '120px', overflowY: 'auto' }}>
-            {sectores.filter(s=>s.toLowerCase().includes(busq.toLowerCase())).map(s => <div key={s} onClick={() => { setResponsables(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]); setBusq('') }} style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', background: responsables.includes(s)?'#f0f6ff':'#fff', borderBottom: '1px solid #f5f5f5' }}>{responsables.includes(s)?'✓ ':''}{s}</div>)}
-          </div>}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-            {responsables.map(r => <span key={r} style={{ fontSize: '12px', padding: '3px 10px 3px 12px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', border: '1px solid #b5d4f4', display: 'flex', alignItems: 'center', gap: '4px' }}>{r} <span onClick={() => setResponsables(p=>p.filter(x=>x!==r))} style={{ cursor: 'pointer', opacity: .6 }}>×</span></span>)}
+
+          {/* descripción */}
+          <div style={{ marginBottom: '20px' }}>
+            {lbl('Descripción')}
+            <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)}
+              style={{ width: '100%', fontSize: '13px', minHeight: '70px', resize: 'vertical', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '9px 12px', fontFamily: 'inherit', lineHeight: '1.5', boxSizing: 'border-box' }} />
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={onClose} style={{ flex: 1, padding: '10px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
-          <button onClick={guardar} disabled={saving} style={{ flex: 2, padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving?'Guardando...':'Guardar cambios'}</button>
+
+          {/* fila: sala + líneas + horario */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+
+            {/* sala + líneas */}
+            <div>
+              {lbl('Sala', true)}
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                {['grande','chica','ambas'].map(s => (
+                  <button key={s} onClick={() => { setSala(sala === s ? '' : s); setLineas([]) }}
+                    style={{ flex: 1, padding: '7px 4px', fontSize: '11px', fontWeight: sala === s ? '700' : '400', borderRadius: '8px', border: `1.5px solid ${sala === s ? '#185FA5' : '#e8e8e8'}`, background: sala === s ? '#185FA5' : '#fafafa', color: sala === s ? '#fff' : '#666', cursor: 'pointer' }}>
+                    {s === 'grande' ? 'Grande' : s === 'chica' ? 'Chica' : 'Ambas'}
+                  </button>
+                ))}
+              </div>
+              {sala && (
+                <>
+                  {lbl('Líneas', true)}
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {lineasOpts.map(l => (
+                      <button key={l} onClick={() => toggleLinea(l)}
+                        style={{ padding: '5px 14px', fontSize: '12px', fontWeight: '500', borderRadius: '20px', border: `1.5px solid ${lineas.includes(l) ? '#BA7517' : '#e8e8e8'}`, background: lineas.includes(l) ? '#fff8ee' : '#fafafa', color: lineas.includes(l) ? '#BA7517' : '#888', cursor: 'pointer' }}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* horario + franja */}
+            <div>
+              {lbl('Horario')}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                <div>
+                  <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px' }}>Inicio</div>
+                  <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)}
+                    style={{ width: '100%', fontSize: '13px', borderRadius: '9px', border: '1.5px solid #e8e8e8', padding: '7px 10px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px' }}>Fin <span style={{ color: '#bbb' }}>opcional</span></div>
+                  <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)}
+                    style={{ width: '100%', fontSize: '13px', borderRadius: '9px', border: '1.5px solid #e8e8e8', padding: '7px 10px', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              {lbl('Franja', true)}
+              <select value={franja} onChange={e => setFranja(e.target.value)}
+                style={{ width: '100%', fontSize: '12px', borderRadius: '9px', border: '1.5px solid #e8e8e8', padding: '8px 10px', background: '#fafafa', color: '#333' }}>
+                {Array.from({length: 10}, (_,i) => {
+                  const h = String(i + 4).padStart(2,'0')
+                  const h2 = String(i + 5).padStart(2,'0')
+                  const f = `${h}:00-${h2}:00`
+                  return <option key={f} value={f}>{h}:00 — {h2}:00</option>
+                })}
+              </select>
+            </div>
+          </div>
+
+          {/* responsables + afectados */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+            <div>
+              {lbl('Sectores responsables', true)}
+              <BuscadorSector seleccionados={responsables} setSeleccionados={setResponsables} busq={busqResp} setBusq={setBusqResp} placeholder="Buscá un sector..." />
+              <button onClick={() => setCausaExterna(!causaExterna)} style={{ marginTop: '8px', fontSize: '11px', padding: '4px 12px', borderRadius: '20px', border: `1.5px ${causaExterna ? 'solid' : 'dashed'} ${causaExterna ? '#185FA5' : '#ddd'}`, background: causaExterna ? '#f0f6ff' : '#fff', color: causaExterna ? '#185FA5' : '#aaa', cursor: 'pointer' }}>
+                🌐 Causa externa
+              </button>
+            </div>
+            <div>
+              {lbl('Sectores afectados', true)}
+              <BuscadorSector seleccionados={afectados} setSeleccionados={setAfectados} busq={busqAfect} setBusq={setBusqAfect} placeholder="Buscá un sector..." />
+            </div>
+          </div>
+
+          {/* etiquetas */}
+          <div style={{ marginBottom: '24px' }}>
+            {lbl('Etiquetas', true)}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+              <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()}
+                placeholder="Escribí y Enter..." style={{ flex: 1, fontSize: '12px', borderRadius: '9px', border: '1.5px solid #e8e8e8', padding: '7px 10px' }} />
+              <button onClick={addTag} style={{ fontSize: '11px', padding: '7px 12px', borderRadius: '9px', border: '1.5px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>+ Add</button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+              {etiquetas.map((t, i) => (
+                <span key={i} style={{ fontSize: '11px', padding: '3px 8px 3px 10px', borderRadius: '20px', background: '#f5f5f5', border: '1px solid #e8e8e8', display: 'flex', alignItems: 'center', gap: '4px', color: '#555' }}>
+                  {t} <span onClick={() => setEtiquetas(p => p.filter((_,j) => j !== i))} style={{ cursor: 'pointer', opacity: .5 }}>×</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* acciones */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={onClose} style={{ flex: 1, padding: '11px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
+            <button onClick={guardar} disabled={saving} style={{ flex: 2, padding: '11px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
+          </div>
         </div>
       </div>
     </>
   )
 }
+
 
 function ModalEliminar({ inc, turnoId, userData, onClose }) {
   const [motivo, setMotivo] = useState('')
