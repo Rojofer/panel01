@@ -389,7 +389,7 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
         <span style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:'10px'}}>
           {primerIngreso && <span style={{fontSize:'11px',fontWeight:'600',color:'#888',display:'flex',alignItems:'center',gap:'3px'}}><span style={{fontSize:'10px',color:'#aaa'}}>↓</span>{primerIngreso}</span>}
           {ultimoIngreso && <span style={{fontSize:'11px',fontWeight:'600',color:'#888',display:'flex',alignItems:'center',gap:'3px'}}><span style={{fontSize:'10px',color:'#aaa'}}>↑</span>{ultimoIngreso}</span>}
-          {descLabel && <span style={{fontSize:'11px',fontWeight:'600',color:'#888',display:'flex',alignItems:'center',gap:'3px'}}> |Break: {descLabel}</span>}
+          {descLabel && <span style={{fontSize:'11px',fontWeight:'600',color:'#888',display:'flex',alignItems:'center',gap:'3px'}}> | Break: {descLabel}</span>}
         </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}}>
