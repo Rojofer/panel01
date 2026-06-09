@@ -198,10 +198,10 @@ export default function Tablero({ user, userData, onVerInforme }) {
             <div style={{ background: '#fff', padding: '14px 18px' }}>
               <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Total producido</div>
               {(() => {
-                const tG = Object.values(produccion).reduce((a,p)=>a+(p.grande||0),0)
-                const tC = Object.values(produccion).reduce((a,p)=>a+(p.chica||0),0)
+                const tG = franjaGrafico ? (produccion[franjaGrafico]?.grande||0) : Object.values(produccion).reduce((a,p)=>a+(p.grande||0),0)
+                const tC = franjaGrafico ? (produccion[franjaGrafico]?.chica||0) : Object.values(produccion).reduce((a,p)=>a+(p.chica||0),0)
                 const total = tG+tC
-                const objTotal = (objG+objC)*(config?generarFranjas(config):[]).length
+                const objTotal = franjaGrafico ? (objG+objC) : (objG+objC)*(config?generarFranjas(config):[]).length
                 const pct = objTotal>0?Math.round(total/objTotal*100):0
                 const delta = total-objTotal
                 return total>0?(<><div style={{fontSize:'22px',fontWeight:'800',color:'#111',lineHeight:1,marginBottom:'4px'}}>{total.toLocaleString('es-AR')}</div><div style={{fontSize:'10px',color:'#bbb',marginBottom:'4px'}}>de {objTotal.toLocaleString('es-AR')} objetivo</div><div style={{display:'flex',alignItems:'center',gap:'6px'}}><span style={{fontSize:'16px',fontWeight:'800',color:pct>=100?'#1D9E75':'#E24B4A'}}>{pct}%</span><span style={{fontSize:'10px',color:pct>=100?'#1D9E75':'#E24B4A',fontWeight:'700'}}>{delta>=0?'+':''}{delta.toLocaleString('es-AR')} cuartos</span></div></>):<div style={{fontSize:'22px',fontWeight:'800',color:'#ddd',lineHeight:1}}>—</div>
