@@ -12,60 +12,101 @@ const gradoLabel = { critico: 'Crítica', moderado: 'Moderada', leve: 'Leve', in
 
 // ─── helpers gráfico ────────────────────────────────────────────────────────
 
-function esDescansoProd(franja, config) {
-  if (!config) return false
+function getDescansoParcial(franja, config) {
+  // Devuelve minutos de descanso que caen dentro de esta franja horaria
+  if (!config) return 0
   const hFranja = parseInt(franja.split(':')[0])
-  if (config.descanso1Hora !== undefined && hFranja === config.descanso1Hora) return true
-  if (config.descanso2Hora !== undefined && hFranja === config.descanso2Hora) return true
-  return false
+  let minDesc = 0
+  for (const d of [
+    { hora: config.descanso1Hora, min: config.descanso1Min || 0, dur: config.descanso1Dur || 0 },
+    { hora: config.descanso2Hora, min: config.descanso2Min || 0, dur: config.descanso2Dur || 0 },
+  ]) {
+    if (d.hora === undefined || d.dur === 0) continue
+    // inicio y fin del descanso en minutos absolutos
+    const dIni = d.hora * 60 + d.min
+    const dFin = dIni + d.dur
+    // inicio y fin de la franja en minutos absolutos
+    const fIni = hFranja * 60
+    const fFin = fIni + 60
+    // intersección
+    const overlap = Math.max(0, Math.min(dFin, fFin) - Math.max(dIni, fIni))
+    minDesc += overlap
+  }
+  return minDesc
 }
 
 function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala }) {
-  const W = 460, H = 120, PT = 24, PB = 32, PX = 8
+  const W = 500, H = 160, PT = 28, PB = 36, PX = 4
   const n = franjas.length
   if (n === 0) return null
-  const barW = Math.max(8, Math.floor((W - PX * 2) / n) - 3)
-  const vals = franjas.map(f => produccion[f]?.[sala]).filter(v => v != null)
-  const maxVal = Math.max(objetivo * 1.5, ...vals, 1)
+  const slot = (W - PX * 2) / n
+  const barW = Math.max(10, Math.floor(slot) - 4)
   const chartH = H - PT - PB
-  const yObj = PT + chartH - Math.round((objetivo / maxVal) * chartH)
+
+  // calcular objetivo proporcional por franja (descontando descanso)
+  function objFranja(franja) {
+    const mDesc = getDescansoParcial(franja, config)
+    return Math.round(objetivo * (60 - mDesc) / 60)
+  }
+
+  const vals = franjas.map(f => produccion[f]?.[sala]).filter(v => v != null)
+  const maxObj = Math.max(...franjas.map(f => objFranja(f)), 1)
+  const maxVal = Math.max(maxObj * 1.35, ...vals, 1)
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-      <line x1={PX} y1={yObj} x2={W - PX} y2={yObj} stroke="#C8B89A" strokeWidth="1" strokeDasharray="4 3" />
       {franjas.map((franja, i) => {
-        const x = PX + i * ((W - PX * 2) / n)
-        const xc = x + barW / 2
-        const desc = esDescansoProd(franja, config)
+        const x = PX + i * slot
+        const xc = x + slot / 2
+        const mDesc = getDescansoParcial(franja, config)
+        const tieneDescanso = mDesc > 0
+        const objF = objFranja(franja)
+        const yObj = PT + chartH - Math.round((objF / maxVal) * chartH)
         const val = produccion[franja]?.[sala]
         const hora = franja.split(':')[0].replace(/^0/, '')
-        if (desc) {
-          return (
-            <g key={franja}>
-              <rect x={x+1} y={PT + chartH * 0.65} width={barW} height={chartH * 0.35} fill="#E0E0D8" rx="2" opacity=".7" />
-              <text x={xc} y={H - PB + 12} textAnchor="middle" fontSize="9" fill="#C0C0B8" fontFamily="system-ui">{hora}</text>
-              <text x={xc} y={H - PB + 21} textAnchor="middle" fontSize="7.5" fill="#C0C0B8" fontFamily="system-ui">desc.</text>
-            </g>
-          )
-        }
+
+        // línea punteada objetivo (por franja, puede variar si hay descanso)
+        const lineEl = (
+          <line key={`obj-${franja}`} x1={x + 1} y1={yObj} x2={x + barW + 1} y2={yObj}
+            stroke="#C8B89A" strokeWidth="1.2" strokeDasharray="3 2" />
+        )
+
         if (val == null) {
           return (
             <g key={franja}>
-              <text x={xc} y={H - PB + 12} textAnchor="middle" fontSize="9" fill="#D8D8D0" fontFamily="system-ui">{hora}</text>
-              <text x={xc} y={PT - 4} textAnchor="middle" fontSize="8.5" fill="#D8D8D0" fontFamily="system-ui">—</text>
+              {lineEl}
+              <text x={xc} y={H - PB + 16} textAnchor="middle" fontSize="10" fill="#CCC" fontFamily="system-ui">{hora}</text>
+              <text x={xc} y={PT - 6} textAnchor="middle" fontSize="10" fill="#DDD" fontFamily="system-ui">—</text>
             </g>
           )
         }
-        const sobre = val >= objetivo
+
+        const sobre = val >= objF
         const color = sobre ? '#1D9E75' : '#E24B4A'
-        const bH = Math.max(4, Math.round((val / maxVal) * chartH))
-        const delta = val - objetivo
+        const bH = Math.max(6, Math.round((val / maxVal) * chartH))
+        const delta = val - objF
+
+        // overlay gris proporcional al descanso (parte superior de la barra)
+        const descPct = mDesc / 60
+        const overlayH = Math.round(bH * descPct)
+
         return (
           <g key={franja}>
-            <rect x={x+1} y={PT + chartH - bH} width={barW} height={bH} fill={color} rx="2" opacity=".85" />
-            <text x={xc} y={PT + chartH - bH - 4} textAnchor="middle" fontSize="8.5" fill={color} fontWeight="600" fontFamily="system-ui">{val}</text>
-            <text x={xc} y={H - PB + 12} textAnchor="middle" fontSize="9" fill="#888" fontFamily="system-ui">{hora}</text>
-            <text x={xc} y={H - PB + 21} textAnchor="middle" fontSize="7.5" fill={sobre ? '#1D9E75' : '#E24B4A'} fontWeight="600" fontFamily="system-ui">{delta >= 0 ? `+${delta}` : delta}</text>
+            {lineEl}
+            {/* barra principal */}
+            <rect x={x+2} y={PT + chartH - bH} width={barW} height={bH} fill={color} rx="3" opacity=".88" />
+            {/* overlay descanso encima */}
+            {tieneDescanso && overlayH > 0 && (
+              <rect x={x+2} y={PT + chartH - bH} width={barW} height={overlayH} fill="#B0B0A8" rx="3" opacity=".75" />
+            )}
+            {/* número arriba */}
+            <text x={xc} y={PT + chartH - bH - 6} textAnchor="middle" fontSize="11" fill={color} fontWeight="700" fontFamily="system-ui">{val}</text>
+            {/* hora */}
+            <text x={xc} y={H - PB + 16} textAnchor="middle" fontSize="10" fill="#888" fontFamily="system-ui">{hora}</text>
+            {/* delta */}
+            <text x={xc} y={H - PB + 27} textAnchor="middle" fontSize="9" fill={sobre ? '#1D9E75' : '#E24B4A'} fontWeight="700" fontFamily="system-ui">
+              {delta >= 0 ? `+${delta}` : delta}
+            </text>
           </g>
         )
       })}
@@ -245,10 +286,10 @@ export default function Tablero({ user, userData, onVerInforme }) {
       <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 260px' : '1fr', gap: '0', minHeight: 'calc(100vh - 56px)' }}>
 
         {/* columna principal */}
-        <div style={{ padding: '20px 24px', borderRight: sectoresConInc.length > 0 ? '1px solid #EFEFED' : 'none' }}>
+        <div style={{ padding: '16px 0', borderRight: sectoresConInc.length > 0 ? '1px solid #EFEFED' : 'none' }}>
 
           {/* ── KPIs barra ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px', padding: '0 16px' }}>
 
             {/* incidencias */}
             <div style={{ background: '#fff', borderRadius: '12px', padding: '12px 16px', border: '1px solid #EFEFED' }}>
@@ -334,7 +375,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
           {/* ── iniciar turno ── */}
           {!turnoExiste && (
             <div onClick={() => setModalIniciarTurno(true)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px solid #1D9E75', borderRadius: '12px', padding: '14px', cursor: 'pointer', marginBottom: '16px' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px solid #1D9E75', borderRadius: '0', padding: '14px', cursor: 'pointer', marginBottom: '12px' }}
               onMouseEnter={e => e.currentTarget.style.background='#edfbf4'}
               onMouseLeave={e => e.currentTarget.style.background='#fff'}>
               <span style={{ fontSize: '20px', fontWeight: '300', color: '#1D9E75', lineHeight: 1 }}>▶</span>
@@ -346,14 +387,14 @@ export default function Tablero({ user, userData, onVerInforme }) {
           {turnoExiste && (
             <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #EFEFED', marginBottom: '14px', overflow: 'hidden' }}>
               <div onClick={() => setGraficosExpandido(!graficosExpandido)}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', cursor: 'pointer', userSelect: 'none' }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', cursor: 'pointer', userSelect: 'none' }}
                 onMouseEnter={e => e.currentTarget.style.background='#FAFAF8'}
                 onMouseLeave={e => e.currentTarget.style.background=''}>
-                <span style={{ fontSize: '11px', fontWeight: '700', color: '#555', textTransform: 'uppercase', letterSpacing: '.07em' }}>Producción hora a hora</span>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '.08em' }}>Producción hora a hora</span>
                 <span style={{ fontSize: '10px', color: '#bbb', transition: 'transform .2s', display: 'inline-block', transform: graficosExpandido ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
               </div>
               {graficosExpandido && (
-                <div style={{ borderTop: '1px solid #F0F0EE', padding: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div style={{ borderTop: '1px solid #F0F0EE', padding: '12px 0 8px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0' }}>
                   {[
                     { label: 'Sala grande', sala: 'grande', obj: objG },
                     { label: 'Sala chica', sala: 'chica', obj: objC },
@@ -384,24 +425,24 @@ export default function Tablero({ user, userData, onVerInforme }) {
           {/* ── incidencias (colapsable) ── */}
           <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #EFEFED', overflow: 'hidden' }}>
             <div onClick={() => setIncidenciasExpandido(!incidenciasExpandido)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', cursor: 'pointer', userSelect: 'none' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', cursor: 'pointer', userSelect: 'none' }}
               onMouseEnter={e => e.currentTarget.style.background='#FAFAF8'}
               onMouseLeave={e => e.currentTarget.style.background=''}>
-              <span style={{ fontSize: '11px', fontWeight: '700', color: '#555', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+              <span style={{ fontSize: '10px', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '.08em' }}>
                 Incidencias {hayFiltros ? `(${incsFiltradas.length} filtradas)` : `(${activas.length})`}
               </span>
               <span style={{ fontSize: '10px', color: '#bbb', transition: 'transform .2s', display: 'inline-block', transform: incidenciasExpandido ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
             </div>
             {incidenciasExpandido && (
-              <div style={{ borderTop: '1px solid #F0F0EE', padding: '12px 16px' }}>
+              <div style={{ borderTop: '1px solid #F0F0EE', padding: '10px 0 0 0' }}>
                 {franjasFiltradas.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '2rem', color: '#ccc', fontSize: '13px' }}>
                     {hayFiltros ? 'Sin incidencias con los filtros aplicados' : 'Sin incidencias registradas en el turno'}
                   </div>
                 ) : (
                   franjasFiltradas.map(franja => (
-                    <div key={franja} style={{ marginBottom: '12px' }}>
-                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '6px', paddingLeft: '2px' }}>
+                    <div key={franja} style={{ marginBottom: '10px', padding: '0 16px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '6px', paddingLeft: '16px' }}>
                         {franja.replace('-', ' — ')}
                       </div>
                       {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
