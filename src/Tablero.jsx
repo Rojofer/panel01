@@ -32,6 +32,14 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [graficosExpandido, setGraficosExpandido] = useState(false)
   const [incidenciasExpandido, setIncidenciasExpandido] = useState(true)
   const [franjaGrafico, setFranjaGrafico] = useState(null)
+  const [primerIngreso, setPrimerIngreso] = useState('')
+  const [ultimoIngreso, setUltimoIngreso] = useState('')
+  const [produccion, setProduccion] = useState({})
+  const [graficosExpandido, setGraficosExpandido] = useState(false)
+  const [incidenciasExpandido, setIncidenciasExpandido] = useState(true)
+  const [franjaGrafico, setFranjaGrafico] = useState(null)
+  const [primerIngreso, setPrimerIngreso] = useState('')
+  const [ultimoIngreso, setUltimoIngreso] = useState('')
 
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
@@ -142,7 +150,10 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const semana = (() => { const d = new Date(); const s = new Date(d.getFullYear(), 0, 1); return Math.ceil(((d - s) / 86400000 + s.getDay() + 1) / 7) })()
   const fechaDisplay = (() => { const d = new Date(); return d.toLocaleDateString('es-AR', { weekday: 'long' }).toUpperCase() + ' ' + String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') })()
   const objG = config?.objetivoGrande || 350
-  const objC = config?.objetivoChica || 100
+  const objC = config?.objetivoChica  || 100
+  const semana = (() => { const d = new Date(); const s = new Date(d.getFullYear(), 0, 1); return Math.ceil(((d - s) / 86400000 + s.getDay() + 1) / 7) })()
+  const objG = config?.objetivoGrande || 350
+  const objC = config?.objetivoChica  || 100
 
   return (
     <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', background: '#F4F4F1', minHeight: '100vh' }}>
@@ -222,7 +233,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
               <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Total producido</div>
               {(() => {
                 const totalG = Object.values(produccion).reduce((a,p) => a + (p.grande || 0), 0)
-                const totalC = Object.values(produccion).reduce((a,p) => a + (p.chica || 0), 0)
+                const totalC = Object.values(produccion).reduce((a,p) => a + (p.chica  || 0), 0)
                 const total = totalG + totalC
                 const objTotal = (objG + objC) * (config ? generarFranjas(config) : []).length
                 const pct = objTotal > 0 ? Math.round(total / objTotal * 100) : 0
@@ -249,7 +260,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
             </div>
           )}
 
-          {/* gráficos hora a hora */}
+          {/* gráficos */}
           {turnoExiste && (
             <div style={{ borderBottom: '1px solid #E8E8E5' }}>
               <div onClick={() => setGraficosExpandido(!graficosExpandido)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', cursor: 'pointer', background: '#fff', userSelect: 'none' }}
@@ -273,6 +284,8 @@ export default function Tablero({ user, userData, onVerInforme }) {
                           label={label}
                           franjaSeleccionada={franjaGrafico}
                           onSelectFranja={f => setFranjaGrafico(prev => prev === f ? null : f)}
+                          primerIngreso={primerIngreso}
+                          ultimoIngreso={ultimoIngreso}
                         />
                       </div>
                     ))}
@@ -314,7 +327,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
           </div>
         </div>
 
-        {/* panel sectores */}
+        {/* sectores */}
         {sectoresConInc.length > 0 && (
           <div style={{ padding: '16px 14px' }}>
             <div style={{ fontSize: '9px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '10px' }}>Sectores · click filtra · doble click detalle</div>
@@ -373,24 +386,28 @@ function getDescansoParcial(franja, config) {
   return minDesc
 }
 
-function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, incidencias, label, franjaSeleccionada, onSelectFranja }) {
+function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, incidencias, label, franjaSeleccionada, onSelectFranja, primerIngreso, ultimoIngreso }) {
   const W = 500, H = 160, PT = 26, PB = 34, PX = 4
   const n = franjas.length
   if (n === 0) return null
   const slot = (W - PX * 2) / n
   const barW = Math.max(10, Math.floor(slot) - 4)
   const chartH = H - PT - PB
+  const primeraFranja = franjas[0]
+  const ultimaFranja  = franjas[franjas.length - 1]
 
   function objFranja(f) {
+    if (f === primeraFranja && primerIngreso) return null
+    if (f === ultimaFranja  && ultimoIngreso) return null
     const mDesc = getDescansoParcial(f, config)
     return Math.round(objetivo * (60 - mDesc) / 60)
   }
 
   const vals = franjas.map(f => produccion[f]?.[sala]).filter(v => v != null)
-  const maxVal = Math.max(...franjas.map(f => objFranja(f)), ...vals, 1) * 1.35
+  const maxVal = Math.max(...franjas.map(f => objFranja(f)).filter(v => v != null), ...vals, 1) * 1.35
 
   const totalProd = Object.values(produccion).reduce((a, p) => a + (p[sala] || 0), 0)
-  const franjasActivas = franjas.filter(f => getDescansoParcial(f, config) < 60)
+  const franjasActivas = franjas.filter(f => getDescansoParcial(f, config) < 60 && objFranja(f) != null)
   const objTotal = objetivo * franjasActivas.length
   const pct = objTotal > 0 ? Math.round(totalProd / objTotal * 100) : 0
   const deltaTotal = totalProd - objTotal
@@ -414,12 +431,12 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
           const xc = x + slot / 2
           const mDesc = getDescansoParcial(franja, config)
           const objF = objFranja(franja)
-          const yObj = PT + chartH - Math.round((objF / maxVal) * chartH)
+          const yObj = objF != null ? PT + chartH - Math.round((objF / maxVal) * chartH) : null
           const val = produccion[franja]?.[sala]
           const hora = (franja || '').split(':')[0].replace(/^0/, '')
           const sel = franjaSeleccionada === franja
           const tieneIncs = (incidencias || []).some(i => i.franja === franja && (i.sala === sala || i.sala === 'ambas'))
-          const lineEl = <line key={`l${i}`} x1={x+1} y1={yObj} x2={x+barW+1} y2={yObj} stroke="#D4C8B4" strokeWidth="1" strokeDasharray="3 2" />
+          const lineEl = yObj != null ? <line key={`l${i}`} x1={x+1} y1={yObj} x2={x+barW+1} y2={yObj} stroke="#D4C8B4" strokeWidth="1" strokeDasharray="3 2" /> : null
           const bgEl = sel ? <rect key={`bg${i}`} x={x} y={0} width={slot} height={H} fill="#f0f6ff" /> : null
           if (val == null) return (
             <g key={franja} onClick={() => onSelectFranja && onSelectFranja(franja)}>
@@ -428,10 +445,10 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
               {tieneIncs && <circle cx={xc} cy={H-PB+28} r="2.5" fill="#E24B4A" />}
             </g>
           )
-          const sobre = val >= objF
-          const color = sobre ? '#1D9E75' : '#E24B4A'
+          const sobre = objF != null ? val >= objF : null
+          const color = sobre === true ? '#1D9E75' : sobre === false ? '#E24B4A' : '#888'
           const bH = Math.max(6, Math.round((val / maxVal) * chartH))
-          const delta = val - objF
+          const delta = objF != null ? val - objF : null
           const overlayH = Math.round(bH * (mDesc / 60))
           return (
             <g key={franja} onClick={() => onSelectFranja && onSelectFranja(franja)} style={{ cursor: 'pointer' }}>
@@ -441,7 +458,7 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
               {mDesc > 0 && overlayH > 0 && <rect x={x+2} y={PT+chartH-bH} width={barW} height={overlayH} fill="#B0B0A8" rx="3" opacity=".75" />}
               <text x={xc} y={PT+chartH-bH-5} textAnchor="middle" fontSize="11" fill={color} fontWeight="700" fontFamily="system-ui">{val}</text>
               <text x={xc} y={H-PB+16} textAnchor="middle" fontSize="11" fontWeight="700" fill={sel ? '#185FA5' : '#555'} fontFamily="system-ui">{hora}</text>
-              <text x={xc} y={H-PB+27} textAnchor="middle" fontSize="9" fill={sobre ? '#1D9E75' : '#E24B4A'} fontWeight="700" fontFamily="system-ui">{delta>=0?`+${delta}`:delta}</text>
+              {delta != null && <text x={xc} y={H-PB+27} textAnchor="middle" fontSize="9" fill={sobre ? '#1D9E75' : '#E24B4A'} fontWeight="700" fontFamily="system-ui">{delta>=0?`+${delta}`:delta}</text>}
             </g>
           )
         })}
