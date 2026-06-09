@@ -100,10 +100,14 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const incsFiltradas = activas
     .filter(i => !sectorFiltro || i.sectoresResponsables?.includes(sectorFiltro))
     .filter(i => !gradoFiltro || i.grado === gradoFiltro)
+    .filter(i => !franjaGrafico || i.franja === franjaGrafico)
 
   const franjasFiltradas = franjas.filter(f => incsFiltradas.filter(i=>i.franja===f).length > 0)
 
-  const tiempoPorCategoria = activas.reduce((acc, i) => {
+  // Para KPIs: si hay franja seleccionada, filtrar también por franja
+  const incsParaKPI = activas.filter(i => !franjaGrafico || i.franja === franjaGrafico)
+
+  const tiempoPorCategoria = incsParaKPI.reduce((acc, i) => {
     if (i.grado === 'informativo') return acc
     if (i.horaInicio && i.horaFin && i.categoriaNombre) {
       const [h1,m1] = i.horaInicio.split(':').map(Number)
@@ -118,10 +122,10 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const catColores = ['#BA7517','#E24B4A','#185FA5','#1D9E75','#888780']
 
   const gradoCount = {
-    critico: activas.filter(i=>i.grado==='critico').length,
-    moderado: activas.filter(i=>i.grado==='moderado').length,
-    leve: activas.filter(i=>i.grado==='leve').length,
-    informativo: activas.filter(i=>i.grado==='informativo').length
+    critico: incsParaKPI.filter(i=>i.grado==='critico').length,
+    moderado: incsParaKPI.filter(i=>i.grado==='moderado').length,
+    leve: incsParaKPI.filter(i=>i.grado==='leve').length,
+    informativo: incsParaKPI.filter(i=>i.grado==='informativo').length
   }
 
   function toggleGrado(g) { setGradoFiltro(gradoFiltro === g ? null : g) }
@@ -181,14 +185,14 @@ export default function Tablero({ user, userData, onVerInforme }) {
         <div style={{ borderRight: sectoresConInc.length > 0 ? '1px solid #E8E8E5' : 'none' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1px', background: '#E8E8E5', borderBottom: '1px solid #E8E8E5' }}>
             <div style={{ background: '#fff', padding: '14px 18px' }}>
-              <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Incidencias del turno</div>
-              <div style={{ fontSize: '32px', fontWeight: '800', color: '#E24B4A', lineHeight: 1, marginBottom: '10px' }}>{incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '13px', color: '#bbb', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}</div>
+              <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px', display:'flex', alignItems:'center', gap:'6px' }}>Incidencias del turno{franjaGrafico && <span style={{fontSize:'9px',padding:'1px 6px',borderRadius:'20px',background:'#EFF5FF',color:'#185FA5',fontWeight:'700',textTransform:'none',letterSpacing:'0'}}>{franjaGrafico.replace('-',' — ')}</span>}</div>
+              <div style={{ fontSize: '22px', fontWeight: '800', color: '#E24B4A', lineHeight: 1, marginBottom: '8px' }}>{incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '12px', color: '#bbb', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}</div>
               {activas.length > 0 && <div style={{ height: '5px', borderRadius: '3px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '8px' }}>{['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && <div key={g} onClick={() => toggleGrado(g)} style={{ height: '100%', background: gradoColor[g], width: `${Math.round(gradoCount[g]/activas.length*100)}%`, borderRadius: '2px', cursor: 'pointer', opacity: gradoFiltro && gradoFiltro !== g ? 0.25 : 1 }} />)}</div>}
               <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>{['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && <span key={g} onClick={() => toggleGrado(g)} style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: gradoBg[g], color: gradoColor[g], fontWeight: '700', cursor: 'pointer', border: `1.5px solid ${gradoFiltro === g ? gradoColor[g] : 'transparent'}`, opacity: gradoFiltro && gradoFiltro !== g ? 0.35 : 1 }}>{gradoCount[g]} {gradoLabel[g]}{gradoCount[g] > 1 ? 's' : ''}</span>)}</div>
             </div>
             <div style={{ background: '#fff', padding: '14px 18px' }}>
-              <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Tiempo perdido</div>
-              <div style={{ fontSize: '32px', fontWeight: '800', color: tiempoTotal > 0 ? '#BA7517' : '#ddd', lineHeight: 1, marginBottom: '10px' }}>{tiempoTotal > 0 ? <>{tiempoTotal}<span style={{ fontSize: '13px', fontWeight: '500', marginLeft: '3px' }}>min</span></> : '—'}</div>
+              <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px', display:'flex', alignItems:'center', gap:'6px' }}>Tiempo perdido{franjaGrafico && <span style={{fontSize:'9px',padding:'1px 6px',borderRadius:'20px',background:'#EFF5FF',color:'#185FA5',fontWeight:'700',textTransform:'none',letterSpacing:'0'}}>{franjaGrafico.replace('-',' — ')}</span>}</div>
+              <div style={{ fontSize: '22px', fontWeight: '800', color: tiempoTotal > 0 ? '#BA7517' : '#ddd', lineHeight: 1, marginBottom: '8px' }}>{tiempoTotal > 0 ? <>{tiempoTotal}<span style={{ fontSize: '12px', fontWeight: '500', marginLeft: '3px' }}>min</span></> : '—'}</div>
               {tiempoTotal > 0 ? (<><div style={{ height: '5px', borderRadius: '3px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '8px' }}>{tiempoOrdenado.map(([cat,mins],idx) => <div key={cat} style={{ height:'100%', background:catColores[idx], width:`${Math.round(mins/tiempoTotal*100)}%`, borderRadius:'2px' }} />)}</div><div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>{tiempoOrdenado.map(([cat,mins],idx) => <div key={cat} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'10px', color:'#555' }}><div style={{ width:'6px', height:'6px', borderRadius:'50%', background:catColores[idx], flexShrink:0 }} /><span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cat}</span><span style={{ fontWeight:'700', color:'#333' }}>{mins}m</span></div>)}</div></>) : <div style={{ fontSize: '10px', color: '#ccc' }}>Registrá hora de fin para ver el tiempo</div>}
             </div>
             <div style={{ background: '#fff', padding: '14px 18px' }}>
@@ -200,7 +204,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
                 const objTotal = (objG+objC)*(config?generarFranjas(config):[]).length
                 const pct = objTotal>0?Math.round(total/objTotal*100):0
                 const delta = total-objTotal
-                return total>0?(<><div style={{fontSize:'32px',fontWeight:'800',color:'#111',lineHeight:1,marginBottom:'6px'}}>{total.toLocaleString('es-AR')}</div><div style={{fontSize:'10px',color:'#bbb',marginBottom:'6px'}}>de {objTotal.toLocaleString('es-AR')} objetivo</div><div style={{display:'flex',alignItems:'center',gap:'6px'}}><span style={{fontSize:'18px',fontWeight:'800',color:pct>=100?'#1D9E75':'#E24B4A'}}>{pct}%</span><span style={{fontSize:'10px',color:pct>=100?'#1D9E75':'#E24B4A',fontWeight:'700'}}>{delta>=0?'+':''}{delta.toLocaleString('es-AR')} cuartos</span></div></>):<div style={{fontSize:'32px',fontWeight:'800',color:'#ddd',lineHeight:1}}>—</div>
+                return total>0?(<><div style={{fontSize:'22px',fontWeight:'800',color:'#111',lineHeight:1,marginBottom:'4px'}}>{total.toLocaleString('es-AR')}</div><div style={{fontSize:'10px',color:'#bbb',marginBottom:'4px'}}>de {objTotal.toLocaleString('es-AR')} objetivo</div><div style={{display:'flex',alignItems:'center',gap:'6px'}}><span style={{fontSize:'16px',fontWeight:'800',color:pct>=100?'#1D9E75':'#E24B4A'}}>{pct}%</span><span style={{fontSize:'10px',color:pct>=100?'#1D9E75':'#E24B4A',fontWeight:'700'}}>{delta>=0?'+':''}{delta.toLocaleString('es-AR')} cuartos</span></div></>):<div style={{fontSize:'22px',fontWeight:'800',color:'#ddd',lineHeight:1}}>—</div>
               })()}
             </div>
           </div>
@@ -353,8 +357,14 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
     y: PT + chartH - Math.round((v / maxVal) * chartH)
   }))
 
+  // Calcular total minutos de descanso del turno
+  const totalDescMinutos = franjas.reduce((sum, f) => sum + getDescansoParcial(f, config, descSala), 0)
+  const descHoras = Math.floor(totalDescMinutos / 60)
+  const descMins = totalDescMinutos % 60
+  const descLabel = totalDescMinutos > 0 ? (descHoras > 0 ? `${descHoras}h ${descMins > 0 ? descMins+'m' : ''}` : `${descMins}m`) : null
+
   return (
-    <div style={{position:'relative'}}>
+    <div style={{position:'relative',border:'1px solid #E8E8E4',borderRadius:'10px',padding:'10px 12px',background:'#fff'}}>
       {/* tooltip líneas */}
       {tooltipFranja && produccion[tooltipFranja]?.lineas && sala === 'grande' && (
         <div style={{position:'absolute',left:tooltipPos.x,top:tooltipPos.y,zIndex:10,background:'#111',color:'#fff',borderRadius:'8px',padding:'8px 12px',fontSize:'11px',pointerEvents:'none',minWidth:'100px',boxShadow:'0 4px 12px rgba(0,0,0,0.25)',transform:'translateX(-50%) translateY(-110%)'}}>
@@ -376,6 +386,7 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
         <span style={{fontSize:'11px',color:'#bbb'}}>de {objTotal.toLocaleString('es-AR')}</span>
         <span style={{fontSize:'13px',fontWeight:'700',color:pct>=100?'#1D9E75':'#E24B4A'}}>{pct}%</span>
         <span style={{fontSize:'11px',fontWeight:'600',color:pct>=100?'#1D9E75':'#E24B4A'}}>{deltaTotal>=0?'+':''}{deltaTotal.toLocaleString('es-AR')}</span>
+        {descLabel && <span style={{marginLeft:'auto',fontSize:'10px',fontWeight:'600',color:'#B0B0A8',display:'flex',alignItems:'center',gap:'3px'}}><span style={{width:'8px',height:'8px',borderRadius:'2px',background:'#B0B0A8',display:'inline-block',opacity:.75}}/>☕ {descLabel} desc.</span>}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}}>
         {/* eje Y + grid */}
