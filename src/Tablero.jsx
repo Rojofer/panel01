@@ -314,10 +314,12 @@ function getDescansoParcial(franja, config, descSala) {
 }
 
 function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, incidencias, label, franjaSeleccionada, onSelectFranja, primerIngreso, ultimoIngreso, descSala }) {
-  const W = 500, H = 160, PT = 26, PB = 34, PX = 4
+  const AXIS_W = 28  // ancho del eje Y
+  const W = 500, H = 175, PT = 20, PB = 36, PX = 4
   const n = franjas.length
   if (n === 0) return null
-  const slot = (W - PX * 2) / n
+  const chartW = W - AXIS_W
+  const slot = (chartW - PX * 2) / n
   const barW = Math.max(10, Math.floor(slot) - 4)
   const chartH = H - PT - PB
   const primeraFranja = franjas[0]
@@ -331,7 +333,7 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
   }
 
   const vals = franjas.map(f => produccion[f]?.[sala]).filter(v => v != null)
-  const maxVal = Math.max(...franjas.map(f => objFranja(f)).filter(v => v != null), ...vals, 1) * 1.35
+  const maxVal = Math.max(...franjas.map(f => objFranja(f)).filter(v => v != null), ...vals, 1) * 1.4
   const totalProd = Object.values(produccion).reduce((a, p) => a + (p[sala] || 0), 0)
   const franjasConObj = franjas.filter(f => getDescansoParcial(f, config, descSala) < 60 && objFranja(f) != null)
   const objTotal = objetivo * franjasConObj.length
@@ -339,9 +341,17 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
   const deltaTotal = totalProd - objTotal
   const incsFranja = franjaSeleccionada ? (incidencias||[]).filter(i=>i.franja===franjaSeleccionada&&(i.sala===sala||i.sala==='ambas')) : []
 
+  // grid lines: 0, objetivo, y un valor intermedio
+  const yZero = PT + chartH  // línea del cero (base de las barras)
+  const gridVals = [0, Math.round(objetivo / 2), objetivo]
+  const gridLines = gridVals.map(v => ({
+    v,
+    y: PT + chartH - Math.round((v / maxVal) * chartH)
+  }))
+
   return (
     <div>
-      <div style={{display:'flex',alignItems:'baseline',gap:'12px',marginBottom:'8px'}}>
+      <div style={{display:'flex',alignItems:'baseline',gap:'12px',marginBottom:'6px'}}>
         <span style={{fontSize:'11px',fontWeight:'700',color:'#888',textTransform:'uppercase',letterSpacing:'.07em'}}>{label}</span>
         <span style={{fontSize:'20px',fontWeight:'800',color:'#111',letterSpacing:'-0.5px'}}>{totalProd.toLocaleString('es-AR')}</span>
         <span style={{fontSize:'11px',color:'#bbb'}}>de {objTotal.toLocaleString('es-AR')}</span>
@@ -349,32 +359,58 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
         <span style={{fontSize:'11px',fontWeight:'600',color:pct>=100?'#1D9E75':'#E24B4A'}}>{deltaTotal>=0?'+':''}{deltaTotal.toLocaleString('es-AR')}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}}>
+        {/* eje Y + grid */}
+        {gridLines.map(({v, y}) => (
+          <g key={v}>
+            {/* línea de grid */}
+            <line x1={AXIS_W} y1={y} x2={W} y2={y}
+              stroke={v === 0 ? '#BBBBB5' : '#EBEBЕ8'}
+              strokeWidth={v === 0 ? 1.2 : 0.8}
+              strokeDasharray={v === 0 ? 'none' : '3 3'} />
+            {/* label eje Y */}
+            <text x={AXIS_W - 4} y={y + 4} textAnchor="end"
+              fontSize="9" fill={v === 0 ? '#999' : '#C0C0BC'} fontFamily="system-ui" fontWeight={v === 0 ? '600' : '400'}>
+              {v}
+            </text>
+          </g>
+        ))}
+        {/* línea vertical del eje Y */}
+        <line x1={AXIS_W} y1={PT} x2={AXIS_W} y2={PT+chartH} stroke="#E8E8E4" strokeWidth="1" />
+
+        {/* barras */}
         {franjas.map((franja,i)=>{
-          const x=PX+i*slot, xc=x+slot/2
-          const mDesc=getDescansoParcial(franja,config,descSala)
-          const objF=objFranja(franja)
-          const yObj=objF!=null?PT+chartH-Math.round((objF/maxVal)*chartH):null
-          const val=produccion[franja]?.[sala]
-          const hora=(franja||'').split(':')[0].replace(/^0/,'')
-          const sel=franjaSeleccionada===franja
-          const tieneIncs=(incidencias||[]).some(i=>i.franja===franja&&(i.sala===sala||i.sala==='ambas'))
-          const lineEl=yObj!=null?<line key={`l${i}`} x1={x+1} y1={yObj} x2={x+barW+1} y2={yObj} stroke="#D4C8B4" strokeWidth="1" strokeDasharray="3 2"/>:null
-          const bgEl=sel?<rect key={`bg${i}`} x={x} y={0} width={slot} height={H} fill="#f0f6ff"/>:null
-          if(val==null) return <g key={franja} onClick={()=>onSelectFranja&&onSelectFranja(franja)}>{bgEl}{lineEl}<text x={xc} y={H-PB+16} textAnchor="middle" fontSize="11" fontWeight="600" fill={sel?'#185FA5':'#CCC'} fontFamily="system-ui">{hora}</text>{tieneIncs&&<circle cx={xc} cy={H-PB+28} r="2.5" fill="#E24B4A"/>}</g>
-          const sobre=objF!=null?val>=objF:null
-          const color=sobre===true?'#1D9E75':sobre===false?'#E24B4A':'#888'
-          const bH=Math.max(6,Math.round((val/maxVal)*chartH))
-          const delta=objF!=null?val-objF:null
-          const overlayH=Math.round(bH*(mDesc/60))
+          const x = AXIS_W + PX + i * slot
+          const xc = x + slot / 2
+          const mDesc = getDescansoParcial(franja, config, descSala)
+          const objF = objFranja(franja)
+          const yObj = objF != null ? PT + chartH - Math.round((objF / maxVal) * chartH) : null
+          const val = produccion[franja]?.[sala]
+          const hora = (franja||'').split(':')[0].replace(/^0/,'')
+          const sel = franjaSeleccionada === franja
+          const tieneIncs = (incidencias||[]).some(i=>i.franja===franja&&(i.sala===sala||i.sala==='ambas'))
+          const lineEl = yObj != null ? <line key={`l${i}`} x1={x} y1={yObj} x2={x+barW+2} y2={yObj} stroke="#C8B89A" strokeWidth="1.2" strokeDasharray="4 2"/> : null
+          const bgEl = sel ? <rect key={`bg${i}`} x={x-2} y={PT} width={slot} height={chartH} fill="#EFF5FF" rx="2"/> : null
+          if (val == null) return (
+            <g key={franja} onClick={()=>onSelectFranja&&onSelectFranja(franja)}>
+              {bgEl}{lineEl}
+              <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="10" fontWeight="600" fill={sel?'#185FA5':'#CCC'} fontFamily="system-ui">{hora}</text>
+              {tieneIncs && <circle cx={xc} cy={H-PB+26} r="2.5" fill="#E24B4A"/>}
+            </g>
+          )
+          const sobre = objF != null ? val >= objF : null
+          const color = sobre === true ? '#1D9E75' : sobre === false ? '#E24B4A' : '#888'
+          const bH = Math.max(4, Math.round((val / maxVal) * chartH))
+          const delta = objF != null ? val - objF : null
+          const overlayH = Math.round(bH * (mDesc / 60))
           return (
             <g key={franja} onClick={()=>onSelectFranja&&onSelectFranja(franja)} style={{cursor:'pointer'}}>
               {bgEl}{lineEl}
-              <rect x={x+2} y={PT+chartH-bH} width={barW} height={bH} fill={color} rx="3" opacity={sel?1:.82}/>
-              {sel&&<rect x={x+2} y={PT+chartH-bH} width={barW} height={bH} fill="none" stroke={color} strokeWidth="2" rx="3"/>}
-              {mDesc>0&&overlayH>0&&<rect x={x+2} y={PT+chartH-bH} width={barW} height={overlayH} fill="#B0B0A8" rx="3" opacity=".75"/>}
-              <text x={xc} y={PT+chartH-bH-5} textAnchor="middle" fontSize="11" fill={color} fontWeight="700" fontFamily="system-ui">{val}</text>
-              <text x={xc} y={H-PB+16} textAnchor="middle" fontSize="11" fontWeight="700" fill={sel?'#185FA5':'#555'} fontFamily="system-ui">{hora}</text>
-              {delta!=null&&<text x={xc} y={H-PB+27} textAnchor="middle" fontSize="9" fill={sobre?'#1D9E75':'#E24B4A'} fontWeight="700" fontFamily="system-ui">{delta>=0?`+${delta}`:delta}</text>}
+              <rect x={x+1} y={yZero-bH} width={barW} height={bH} fill={color} rx="3" opacity={sel?1:.85}/>
+              {sel && <rect x={x+1} y={yZero-bH} width={barW} height={bH} fill="none" stroke={color} strokeWidth="2" rx="3"/>}
+              {mDesc > 0 && overlayH > 0 && <rect x={x+1} y={yZero-bH} width={barW} height={overlayH} fill="#B0B0A8" rx="3" opacity=".75"/>}
+              <text x={xc} y={yZero-bH-5} textAnchor="middle" fontSize="10" fill={color} fontWeight="700" fontFamily="system-ui">{val}</text>
+              <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="10" fontWeight="700" fill={sel?'#185FA5':'#555'} fontFamily="system-ui">{hora}</text>
+              {delta != null && <text x={xc} y={H-PB+25} textAnchor="middle" fontSize="8.5" fill={sobre?'#1D9E75':'#E24B4A'} fontWeight="700" fontFamily="system-ui">{delta>=0?`+${delta}`:delta}</text>}
             </g>
           )
         })}
