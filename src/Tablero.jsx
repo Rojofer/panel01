@@ -302,7 +302,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
                 ) : franjasFiltradas.map(franja => (
                   <div key={franja} style={{ marginBottom: '12px' }}>
                     <div style={{ fontSize: '10px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '6px' }}>
-                      {franja.replace('-', ' — ')}
+                      {(franja || '').replace('-', ' — ')}
                     </div>
                     {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
                       <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id === ultimaIncId} />
@@ -473,9 +473,9 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
         <div style={{ background: '#F8FBFF', border: '1.5px solid #C8DCF5', borderRadius: '10px', padding: '10px 14px', marginTop: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '11px', fontWeight: '700', color: '#185FA5', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-              {franjaSeleccionada.replace('-', ' — ')}
+              {(franjaSeleccionada || '').replace('-', ' — ')}
             </span>
-            <span onClick={() => setFranjaSeleccionada(null)} style={{ fontSize: '11px', color: '#aaa', cursor: 'pointer' }}>×</span>
+            <span onClick={() => onSelectFranja && onSelectFranja(franjaSeleccionada)} style={{ fontSize: '11px', color: '#aaa', cursor: 'pointer' }}>×</span>
           </div>
           {incsFranja.length === 0 ? (
             <div style={{ fontSize: '12px', color: '#bbb', padding: '4px 0' }}>Sin incidencias en esta franja para {label.toLowerCase()}</div>
@@ -506,7 +506,7 @@ function PanelSinSala({ franja, incidencias, onClose }) {
     <div style={{ margin: '0 16px 12px', background: '#FFFBF0', border: '1.5px solid #F5E6B0', borderRadius: '10px', padding: '10px 14px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <span style={{ fontSize: '11px', fontWeight: '700', color: '#BA7517', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-          Sin sala · {franja.replace('-', ' — ')}
+          Sin sala · {(franja || '').replace('-', ' — ')}
         </span>
         <span onClick={onClose} style={{ fontSize: '11px', color: '#aaa', cursor: 'pointer' }}>×</span>
       </div>
