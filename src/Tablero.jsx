@@ -40,21 +40,18 @@ export default function Tablero({ user, userData, onVerInforme }) {
   useEffect(() => {
     // Buscar el turno de hoy — por fecha, sin importar estado
     const hoy = new Date()
-    const fechaStr = hoy.toISOString().slice(0,10)
+    // Usar fecha local (no UTC) para evitar desfase horario
+    const fechaStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`
+    const fechaAyer = (() => { const d = new Date(hoy); d.setDate(d.getDate()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
     const idManana = fechaStr.replace(/-/g,'') + '_manana'
 
     getDocs(collection(db,'turnos')).then(snap => {
-      // Buscar cualquier turno de hoy (activo o cerrado), el más reciente
-      const turnosHoy = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(t => t.fecha === fechaStr)
-        .sort((a,b) => b.id.localeCompare(a.id))
-
-      if (turnosHoy.length > 0) {
-        setTurnoId(turnosHoy[0].id)
-      } else {
-        setTurnoId(idManana)
-      }
+      const todos = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      // Buscar turno de hoy, si no de ayer (turno nocturno que sigue activo)
+      const turnosHoy = todos.filter(t => t.fecha === fechaStr).sort((a,b) => b.id.localeCompare(a.id))
+      const turnosAyer = todos.filter(t => t.fecha === fechaAyer && t.estado === 'activo').sort((a,b) => b.id.localeCompare(a.id))
+      const encontrado = turnosHoy[0] || turnosAyer[0]
+      setTurnoId(encontrado ? encontrado.id : idManana)
     })
   }, [])
 
