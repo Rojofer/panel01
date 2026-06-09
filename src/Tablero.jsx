@@ -323,7 +323,7 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
   const [tooltipFranja, setTooltipFranja] = useState(null)
   const [tooltipPos,    setTooltipPos]    = useState({ x: 0, y: 0 })
   const AXIS_W = 28  // ancho del eje Y
-  const W = 500, H = 175, PT = 20, PB = 36, PX = 4
+  const W = 500, H = 220, PT = 20, PB = 36, PX = 4
   const n = franjas.length
   if (n === 0) return null
   const chartW = W - AXIS_W
