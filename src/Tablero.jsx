@@ -261,15 +261,15 @@ export default function Tablero({ user, userData, onVerInforme }) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#fff', padding: '0 0 12px 0' }}>
                   {[{ label: 'Sala grande', sala: 'grande', obj: objG }, { label: 'Sala chica', sala: 'chica', obj: objC }].map(({ label, sala, obj }) => (
                     <div key={sala} style={{ padding: '10px 16px' }}>
-                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '4px' }}>{label}</div>
-                      <GraficoHoraAHora franjas={config ? generarFranjas(config) : []} produccion={produccion} objetivo={obj} config={config} sala={sala} />
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '2px' }}>
-                        {[['#1D9E75','Sobre obj.'],['#E24B4A','Bajo obj.'],['#B0B0A8','Descanso']].map(([c,t]) => (
-                          <span key={t} style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '9px', color: '#aaa' }}>
-                            <span style={{ width: '7px', height: '7px', borderRadius: '2px', background: c, display: 'inline-block' }} />{t}
-                          </span>
-                        ))}
-                      </div>
+                      <GraficoHoraAHora
+                        franjas={config ? generarFranjas(config) : []}
+                        produccion={produccion}
+                        objetivo={obj}
+                        config={config}
+                        sala={sala}
+                        incidencias={activas}
+                        label={label}
+                      />
                     </div>
                   ))}
                 </div>
@@ -368,7 +368,8 @@ function getDescansoParcial(franja, config) {
   return minDesc
 }
 
-function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala }) {
+function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, incidencias, label }) {
+  const [franjaSeleccionada, setFranjaSeleccionada] = useState(null)
   const W = 500, H = 160, PT = 26, PB = 34, PX = 4
   const n = franjas.length
   if (n === 0) return null
@@ -384,41 +385,114 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala }) {
   const vals = franjas.map(f => produccion[f]?.[sala]).filter(v => v != null)
   const maxVal = Math.max(...franjas.map(f => objFranja(f)), ...vals, 1) * 1.35
 
+  const totalProd = Object.values(produccion).reduce((a, p) => a + (p[sala] || 0), 0)
+  const franjasActivas = franjas.filter(f => getDescansoParcial(f, config) < 60)
+  const objTotal = objetivo * franjasActivas.length
+  const pct = objTotal > 0 ? Math.round(totalProd / objTotal * 100) : 0
+  const deltaTotal = totalProd - objTotal
+
+  const incsFranja = franjaSeleccionada
+    ? (incidencias || []).filter(i => i.franja === franjaSeleccionada && (i.sala === sala || i.sala === 'ambas'))
+    : []
+
+  function handleBarClick(franja) {
+    setFranjaSeleccionada(prev => prev === franja ? null : franja)
+  }
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-      {franjas.map((franja, i) => {
-        const x = PX + i * slot
-        const xc = x + slot / 2
-        const mDesc = getDescansoParcial(franja, config)
-        const objF = objFranja(franja)
-        const yObj = PT + chartH - Math.round((objF / maxVal) * chartH)
-        const val = produccion[franja]?.[sala]
-        const hora = franja.split(':')[0].replace(/^0/, '')
-        const lineEl = <line key={`l${i}`} x1={x+1} y1={yObj} x2={x+barW+1} y2={yObj} stroke="#C8B89A" strokeWidth="1.2" strokeDasharray="3 2" />
-        if (val == null) return (
-          <g key={franja}>{lineEl}
-            <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="10" fill="#CCC" fontFamily="system-ui">{hora}</text>
-          </g>
-        )
-        const sobre = val >= objF
-        const color = sobre ? '#1D9E75' : '#E24B4A'
-        const bH = Math.max(6, Math.round((val / maxVal) * chartH))
-        const delta = val - objF
-        const overlayH = Math.round(bH * (mDesc / 60))
-        return (
-          <g key={franja}>
-            {lineEl}
-            <rect x={x+2} y={PT+chartH-bH} width={barW} height={bH} fill={color} rx="3" opacity=".88" />
-            {mDesc > 0 && overlayH > 0 && <rect x={x+2} y={PT+chartH-bH} width={barW} height={overlayH} fill="#B0B0A8" rx="3" opacity=".75" />}
-            <text x={xc} y={PT+chartH-bH-5} textAnchor="middle" fontSize="11" fill={color} fontWeight="700" fontFamily="system-ui">{val}</text>
-            <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="10" fill="#888" fontFamily="system-ui">{hora}</text>
-            <text x={xc} y={H-PB+24} textAnchor="middle" fontSize="9" fill={sobre?'#1D9E75':'#E24B4A'} fontWeight="700" fontFamily="system-ui">{delta>=0?`+${delta}`:delta}</text>
-          </g>
-        )
-      })}
-    </svg>
+    <div>
+      {/* mini KPIs */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '8px' }}>
+        <span style={{ fontSize: '11px', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '.07em' }}>{label}</span>
+        <span style={{ fontSize: '20px', fontWeight: '800', color: '#111', letterSpacing: '-0.5px' }}>{totalProd.toLocaleString('es-AR')}</span>
+        <span style={{ fontSize: '11px', color: '#bbb' }}>de {objTotal.toLocaleString('es-AR')}</span>
+        <span style={{ fontSize: '13px', fontWeight: '700', color: pct >= 100 ? '#1D9E75' : '#E24B4A', marginLeft: '2px' }}>{pct}%</span>
+        <span style={{ fontSize: '11px', fontWeight: '600', color: pct >= 100 ? '#1D9E75' : '#E24B4A' }}>{deltaTotal >= 0 ? '+' : ''}{deltaTotal.toLocaleString('es-AR')}</span>
+      </div>
+
+      {/* gráfico SVG */}
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', cursor: 'pointer' }}>
+        {franjas.map((franja, i) => {
+          const x = PX + i * slot
+          const xc = x + slot / 2
+          const mDesc = getDescansoParcial(franja, config)
+          const objF = objFranja(franja)
+          const yObj = PT + chartH - Math.round((objF / maxVal) * chartH)
+          const val = produccion[franja]?.[sala]
+          const hora = franja.split(':')[0].replace(/^0/, '')
+          const seleccionada = franjaSeleccionada === franja
+          const tieneIncs = (incidencias || []).some(i => i.franja === franja && (i.sala === sala || i.sala === 'ambas'))
+
+          const lineEl = <line key={`l${i}`} x1={x+1} y1={yObj} x2={x+barW+1} y2={yObj}
+            stroke="#D4C8B4" strokeWidth="1" strokeDasharray="3 2" />
+
+          // fondo seleccionada
+          const bgEl = seleccionada
+            ? <rect key={`bg${i}`} x={x} y={0} width={slot} height={H} fill="#f0f6ff" rx="0" />
+            : null
+
+          if (val == null) return (
+            <g key={franja} onClick={() => handleBarClick(franja)}>
+              {bgEl}{lineEl}
+              <text x={xc} y={H-PB+16} textAnchor="middle" fontSize="11" fontWeight="600" fill={seleccionada ? '#185FA5' : '#CCC'} fontFamily="system-ui">{hora}</text>
+              {tieneIncs && <circle cx={xc} cy={H-PB+28} r="2.5" fill="#E24B4A" />}
+            </g>
+          )
+
+          const sobre = val >= objF
+          const color = sobre ? '#1D9E75' : '#E24B4A'
+          const bH = Math.max(6, Math.round((val / maxVal) * chartH))
+          const delta = val - objF
+          const overlayH = Math.round(bH * (mDesc / 60))
+
+          return (
+            <g key={franja} onClick={() => handleBarClick(franja)} style={{ cursor: 'pointer' }}>
+              {bgEl}{lineEl}
+              <rect x={x+2} y={PT+chartH-bH} width={barW} height={bH}
+                fill={color} rx="3" opacity={seleccionada ? 1 : .82} />
+              {seleccionada && <rect x={x+2} y={PT+chartH-bH} width={barW} height={bH}
+                fill="none" stroke={color} strokeWidth="2" rx="3" />}
+              {mDesc > 0 && overlayH > 0 && <rect x={x+2} y={PT+chartH-bH} width={barW} height={overlayH} fill="#B0B0A8" rx="3" opacity=".75" />}
+              <text x={xc} y={PT+chartH-bH-5} textAnchor="middle" fontSize="11" fill={color} fontWeight="700" fontFamily="system-ui">{val}</text>
+              <text x={xc} y={H-PB+16} textAnchor="middle" fontSize="11" fontWeight="700" fill={seleccionada ? '#185FA5' : '#555'} fontFamily="system-ui">{hora}</text>
+              <text x={xc} y={H-PB+27} textAnchor="middle" fontSize="9" fill={sobre ? '#1D9E75' : '#E24B4A'} fontWeight="700" fontFamily="system-ui">{delta>=0?`+${delta}`:delta}</text>
+              {tieneIncs && <circle cx={xc} cy={H-PB+27} r="0" fill="transparent" />}
+            </g>
+          )
+        })}
+      </svg>
+
+      {/* panel de incidencias de la franja seleccionada */}
+      {franjaSeleccionada && (
+        <div style={{ background: '#F8FBFF', border: '1.5px solid #C8DCF5', borderRadius: '10px', padding: '10px 14px', marginTop: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '700', color: '#185FA5', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              {franjaSeleccionada.replace('-', ' — ')}
+            </span>
+            <span onClick={() => setFranjaSeleccionada(null)} style={{ fontSize: '11px', color: '#aaa', cursor: 'pointer' }}>×</span>
+          </div>
+          {incsFranja.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#bbb', padding: '4px 0' }}>Sin incidencias en esta franja para {label.toLowerCase()}</div>
+          ) : incsFranja.map(inc => {
+            const dur = inc.horaInicio && inc.horaFin
+              ? Math.max(0, (parseInt(inc.horaFin)*60+parseInt(inc.horaFin.split(':')[1])) - (parseInt(inc.horaInicio)*60+parseInt(inc.horaInicio.split(':')[1])))
+              : null
+            return (
+              <div key={inc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid #E8F0FB' }}>
+                <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
+                <span style={{ fontSize: '11px', color: '#888', minWidth: '38px', fontVariantNumeric: 'tabular-nums' }}>{inc.horaInicio}</span>
+                <span style={{ fontSize: '12px', fontWeight: '600', color: '#222', flex: 1 }}>{inc.categoriaNombre}</span>
+                <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: inc.grado === 'critico' ? '#fef2f2' : inc.grado === 'moderado' ? '#fff8ee' : inc.grado === 'leve' ? '#f0f6ff' : '#edfbf4', color: gradoColor[inc.grado], fontWeight: '700' }}>{inc.grado}</span>
+                {dur !== null && dur > 0 && <span style={{ fontSize: '11px', color: '#aaa', minWidth: '30px', textAlign: 'right' }}>{dur}m</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
+
 
 function generarFranjas(config) {
   const franjas = []
