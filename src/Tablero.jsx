@@ -33,9 +33,11 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [incidenciasExpandido, setIncidenciasExpandido] = useState(true)
   const [franjaGrafico, setFranjaGrafico] = useState(null)
   const [primerIngresoGrande, setPrimerIngresoGrande] = useState('')
-  const [primerIngresoChica, setPrimerIngresoChica] = useState('')
+  const [primerIngresoChica,  setPrimerIngresoChica]  = useState('')
   const [ultimoIngresoGrande, setUltimoIngresoGrande] = useState('')
-  const [ultimoIngresoChica, setUltimoIngresoChica] = useState('')
+  const [ultimoIngresoChica,  setUltimoIngresoChica]  = useState('')
+  const [descGrande, setDescGrande] = useState(null)
+  const [descChica,  setDescChica]  = useState(null)
 
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
@@ -43,30 +45,15 @@ export default function Tablero({ user, userData, onVerInforme }) {
   }, [])
 
   useEffect(() => {
-    // Buscar turno activo de hoy — primero intenta con _manana, si no existe busca cualquier turno activo de hoy
     const hoy = new Date()
-    const fechaStr = hoy.toISOString().slice(0,10) // "2026-06-08"
-    const idBase = fechaStr.replace(/-/g,'') // "20260608"
-    const idManana = idBase + '_manana'
-
-    getDoc(doc(db,'turnos',idManana)).then(s => {
-      if (s.exists()) {
-        setTurnoId(idManana)
-      } else {
-        // Buscar en todos los turnos uno activo con fecha de hoy
-        getDocs(collection(db,'turnos')).then(snap => {
-          const turnoHoy = snap.docs.find(d => {
-            const data = d.data()
-            return data.fecha === fechaStr && data.estado === 'activo'
-          })
-          if (turnoHoy) {
-            setTurnoId(turnoHoy.id)
-          } else {
-            // Usar el ID por defecto igual (para que ModalIniciarTurno lo cree con ese ID)
-            setTurnoId(idManana)
-          }
-        })
-      }
+    const fechaStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`
+    const fechaAyer = (() => { const d = new Date(hoy); d.setDate(d.getDate()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+    const idManana = fechaStr.replace(/-/g,'') + '_manana'
+    getDocs(collection(db,'turnos')).then(snap => {
+      const todos = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      const turnosHoy = todos.filter(t => t.fecha === fechaStr).sort((a,b) => b.id.localeCompare(a.id))
+      const turnosAyer = todos.filter(t => t.fecha === fechaAyer && t.estado === 'activo').sort((a,b) => b.id.localeCompare(a.id))
+      setTurnoId((turnosHoy[0] || turnosAyer[0])?.id || idManana)
     })
   }, [])
 
@@ -89,6 +76,17 @@ export default function Tablero({ user, userData, onVerInforme }) {
       const prod = {}
       snap.docs.forEach(d => { const data = d.data(); prod[data.franja] = data })
       setProduccion(prod)
+    })
+    getDoc(doc(db,'turnos',turnoId)).then(s => {
+      if (s.exists()) {
+        const d = s.data()
+        if (d.primerIngresoGrande) setPrimerIngresoGrande(d.primerIngresoGrande)
+        if (d.primerIngresoChica)  setPrimerIngresoChica(d.primerIngresoChica)
+        if (d.ultimoIngresoGrande) setUltimoIngresoGrande(d.ultimoIngresoGrande)
+        if (d.ultimoIngresoChica)  setUltimoIngresoChica(d.ultimoIngresoChica)
+        if (d.descansoGrandeHora !== undefined) setDescGrande({ hora: d.descansoGrandeHora, min: d.descansoGrandeMin || 0, dur: d.descansoGrandeDur || 0 })
+        if (d.descansoChicaHora  !== undefined) setDescChica ({ hora: d.descansoChicaHora,  min: d.descansoChicaMin  || 0, dur: d.descansoChicaDur  || 0 })
+      }
     })
     return unsub
   }, [turnoId])
@@ -162,10 +160,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
             {turnoExiste && <span style={{ fontSize: '9px', fontWeight: '700', color: '#1D9E75', letterSpacing: '.06em', textTransform: 'uppercase' }}>Turno activo</span>}
           </div>
         </div>
-        {turnoExiste && (
-          <button onClick={() => setDrawerOpen('elegir')} title="Registrar incidencia"
-            style={{ width: '30px', height: '30px', borderRadius: '50%', border: 'none', background: '#185FA5', color: '#fff', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0, boxShadow: '0 2px 6px rgba(24,95,165,0.3)' }}>+</button>
-        )}
+        {turnoExiste && <button onClick={() => setDrawerOpen('elegir')} title="Registrar incidencia" style={{ width: '30px', height: '30px', borderRadius: '50%', border: 'none', background: '#185FA5', color: '#fff', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0, boxShadow: '0 2px 6px rgba(24,95,165,0.3)' }}>+</button>}
         {hayFiltros && (
           <div style={{ display: 'flex', gap: '4px' }}>
             {gradoFiltro && <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: gradoBg[gradoFiltro], color: gradoColor[gradoFiltro], fontWeight: '700', display: 'flex', alignItems: 'center', gap: '3px' }}>{gradoLabel[gradoFiltro]} <span onClick={() => setGradoFiltro(null)} style={{ cursor: 'pointer', opacity: .6 }}>×</span></span>}
@@ -187,140 +182,82 @@ export default function Tablero({ user, userData, onVerInforme }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1px', background: '#E8E8E5', borderBottom: '1px solid #E8E8E5' }}>
             <div style={{ background: '#fff', padding: '14px 18px' }}>
               <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Incidencias del turno</div>
-              <div style={{ fontSize: '32px', fontWeight: '800', color: '#E24B4A', lineHeight: 1, marginBottom: '10px' }}>
-                {incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '13px', color: '#bbb', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}
-              </div>
-              {activas.length > 0 && <div style={{ height: '5px', borderRadius: '3px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '8px' }}>
-                {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && <div key={g} onClick={() => toggleGrado(g)} style={{ height: '100%', background: gradoColor[g], width: `${Math.round(gradoCount[g]/activas.length*100)}%`, borderRadius: '2px', cursor: 'pointer', opacity: gradoFiltro && gradoFiltro !== g ? 0.25 : 1 }} />)}
-              </div>}
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && <span key={g} onClick={() => toggleGrado(g)} style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: gradoBg[g], color: gradoColor[g], fontWeight: '700', cursor: 'pointer', border: `1.5px solid ${gradoFiltro === g ? gradoColor[g] : 'transparent'}`, opacity: gradoFiltro && gradoFiltro !== g ? 0.35 : 1 }}>{gradoCount[g]} {gradoLabel[g]}{gradoCount[g] > 1 ? 's' : ''}</span>)}
-              </div>
+              <div style={{ fontSize: '32px', fontWeight: '800', color: '#E24B4A', lineHeight: 1, marginBottom: '10px' }}>{incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '13px', color: '#bbb', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}</div>
+              {activas.length > 0 && <div style={{ height: '5px', borderRadius: '3px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '8px' }}>{['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && <div key={g} onClick={() => toggleGrado(g)} style={{ height: '100%', background: gradoColor[g], width: `${Math.round(gradoCount[g]/activas.length*100)}%`, borderRadius: '2px', cursor: 'pointer', opacity: gradoFiltro && gradoFiltro !== g ? 0.25 : 1 }} />)}</div>}
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>{['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && <span key={g} onClick={() => toggleGrado(g)} style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: gradoBg[g], color: gradoColor[g], fontWeight: '700', cursor: 'pointer', border: `1.5px solid ${gradoFiltro === g ? gradoColor[g] : 'transparent'}`, opacity: gradoFiltro && gradoFiltro !== g ? 0.35 : 1 }}>{gradoCount[g]} {gradoLabel[g]}{gradoCount[g] > 1 ? 's' : ''}</span>)}</div>
             </div>
             <div style={{ background: '#fff', padding: '14px 18px' }}>
               <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Tiempo perdido</div>
-              <div style={{ fontSize: '32px', fontWeight: '800', color: tiempoTotal > 0 ? '#BA7517' : '#ddd', lineHeight: 1, marginBottom: '10px' }}>
-                {tiempoTotal > 0 ? <>{tiempoTotal}<span style={{ fontSize: '13px', fontWeight: '500', marginLeft: '3px' }}>min</span></> : '—'}
-              </div>
-              {tiempoTotal > 0 ? (<>
-                <div style={{ height: '5px', borderRadius: '3px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '8px' }}>
-                  {tiempoOrdenado.map(([cat, mins], idx) => <div key={cat} style={{ height: '100%', background: catColores[idx], width: `${Math.round(mins/tiempoTotal*100)}%`, borderRadius: '2px' }} />)}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  {tiempoOrdenado.map(([cat, mins], idx) => (
-                    <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10px', color: '#555' }}>
-                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: catColores[idx], flexShrink: 0 }} />
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
-                      <span style={{ fontWeight: '700', color: '#333' }}>{mins}m</span>
-                    </div>
-                  ))}
-                </div>
-              </>) : <div style={{ fontSize: '10px', color: '#ccc' }}>Registrá hora de fin para ver el tiempo</div>}
+              <div style={{ fontSize: '32px', fontWeight: '800', color: tiempoTotal > 0 ? '#BA7517' : '#ddd', lineHeight: 1, marginBottom: '10px' }}>{tiempoTotal > 0 ? <>{tiempoTotal}<span style={{ fontSize: '13px', fontWeight: '500', marginLeft: '3px' }}>min</span></> : '—'}</div>
+              {tiempoTotal > 0 ? (<><div style={{ height: '5px', borderRadius: '3px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '8px' }}>{tiempoOrdenado.map(([cat,mins],idx) => <div key={cat} style={{ height:'100%', background:catColores[idx], width:`${Math.round(mins/tiempoTotal*100)}%`, borderRadius:'2px' }} />)}</div><div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>{tiempoOrdenado.map(([cat,mins],idx) => <div key={cat} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'10px', color:'#555' }}><div style={{ width:'6px', height:'6px', borderRadius:'50%', background:catColores[idx], flexShrink:0 }} /><span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cat}</span><span style={{ fontWeight:'700', color:'#333' }}>{mins}m</span></div>)}</div></>) : <div style={{ fontSize: '10px', color: '#ccc' }}>Registrá hora de fin para ver el tiempo</div>}
             </div>
             <div style={{ background: '#fff', padding: '14px 18px' }}>
               <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Total producido</div>
               {(() => {
-                const totalG = Object.values(produccion).reduce((a,p) => a + (p.grande || 0), 0)
-                const totalC = Object.values(produccion).reduce((a,p) => a + (p.chica  || 0), 0)
-                const total = totalG + totalC
-                const objTotal = (objG + objC) * (config ? generarFranjas(config) : []).length
-                const pct = objTotal > 0 ? Math.round(total / objTotal * 100) : 0
-                const delta = total - objTotal
-                return total > 0 ? (<>
-                  <div style={{ fontSize: '32px', fontWeight: '800', color: '#111', lineHeight: 1, marginBottom: '6px' }}>{total.toLocaleString('es-AR')}</div>
-                  <div style={{ fontSize: '10px', color: '#bbb', marginBottom: '6px' }}>de {objTotal.toLocaleString('es-AR')} objetivo</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '18px', fontWeight: '800', color: pct >= 100 ? '#1D9E75' : '#E24B4A' }}>{pct}%</span>
-                    <span style={{ fontSize: '10px', color: pct >= 100 ? '#1D9E75' : '#E24B4A', fontWeight: '700' }}>{delta >= 0 ? '+' : ''}{delta.toLocaleString('es-AR')} cuartos</span>
-                  </div>
-                </>) : <div style={{ fontSize: '32px', fontWeight: '800', color: '#ddd', lineHeight: 1 }}>—</div>
+                const tG = Object.values(produccion).reduce((a,p)=>a+(p.grande||0),0)
+                const tC = Object.values(produccion).reduce((a,p)=>a+(p.chica||0),0)
+                const total = tG+tC
+                const objTotal = (objG+objC)*(config?generarFranjas(config):[]).length
+                const pct = objTotal>0?Math.round(total/objTotal*100):0
+                const delta = total-objTotal
+                return total>0?(<><div style={{fontSize:'32px',fontWeight:'800',color:'#111',lineHeight:1,marginBottom:'6px'}}>{total.toLocaleString('es-AR')}</div><div style={{fontSize:'10px',color:'#bbb',marginBottom:'6px'}}>de {objTotal.toLocaleString('es-AR')} objetivo</div><div style={{display:'flex',alignItems:'center',gap:'6px'}}><span style={{fontSize:'18px',fontWeight:'800',color:pct>=100?'#1D9E75':'#E24B4A'}}>{pct}%</span><span style={{fontSize:'10px',color:pct>=100?'#1D9E75':'#E24B4A',fontWeight:'700'}}>{delta>=0?'+':''}{delta.toLocaleString('es-AR')} cuartos</span></div></>):<div style={{fontSize:'32px',fontWeight:'800',color:'#ddd',lineHeight:1}}>—</div>
               })()}
             </div>
           </div>
 
-          {!turnoExiste && (
-            <div onClick={() => setModalIniciarTurno(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', borderBottom: '1px solid #E8E8E5', padding: '14px', cursor: 'pointer' }}
-              onMouseEnter={e => e.currentTarget.style.background='#edfbf4'}
-              onMouseLeave={e => e.currentTarget.style.background='#fff'}>
-              <span style={{ fontSize: '18px', color: '#1D9E75' }}>▶</span>
-              <span style={{ fontSize: '13px', fontWeight: '600', color: '#1D9E75' }}>Iniciar turno de hoy</span>
-            </div>
-          )}
+          {!turnoExiste && <div onClick={()=>setModalIniciarTurno(true)} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',background:'#fff',borderBottom:'1px solid #E8E8E5',padding:'14px',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background='#edfbf4'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}><span style={{fontSize:'18px',color:'#1D9E75'}}>▶</span><span style={{fontSize:'13px',fontWeight:'600',color:'#1D9E75'}}>Iniciar turno de hoy</span></div>}
 
           {turnoExiste && (
             <div style={{ borderBottom: '1px solid #E8E8E5' }}>
-              <div onClick={() => setGraficosExpandido(!graficosExpandido)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', cursor: 'pointer', background: '#fff', userSelect: 'none' }}
-                onMouseEnter={e => e.currentTarget.style.background='#FAFAF8'}
-                onMouseLeave={e => e.currentTarget.style.background='#fff'}>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '.08em' }}>Producción hora a hora</span>
-                <span style={{ fontSize: '10px', color: '#ccc', transform: graficosExpandido ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform .2s' }}>▼</span>
+              <div onClick={()=>setGraficosExpandido(!graficosExpandido)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 18px',cursor:'pointer',background:'#fff',userSelect:'none'}} onMouseEnter={e=>e.currentTarget.style.background='#FAFAF8'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                <span style={{fontSize:'10px',fontWeight:'700',color:'#999',textTransform:'uppercase',letterSpacing:'.08em'}}>Producción hora a hora</span>
+                <span style={{fontSize:'10px',color:'#ccc',transform:graficosExpandido?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▼</span>
               </div>
               {graficosExpandido && (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#fff', padding: '0 0 12px 0' }}>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',background:'#fff',padding:'0 0 12px 0'}}>
                     {[
-                      { label: 'Sala grande', sala: 'grande', obj: objG, primerIngreso: primerIngresoGrande, ultimoIngreso: ultimoIngresoGrande },
-                      { label: 'Sala chica',  sala: 'chica',  obj: objC, primerIngreso: primerIngresoChica,  ultimoIngreso: ultimoIngresoChica  },
-                    ].map(({ label, sala, obj, primerIngreso, ultimoIngreso }) => (
-                      <div key={sala} style={{ padding: '10px 16px' }}>
-                        <GraficoHoraAHora
-                          franjas={config ? generarFranjas(config) : []}
-                          produccion={produccion}
-                          objetivo={obj}
-                          config={config}
-                          sala={sala}
-                          incidencias={activas}
-                          label={label}
-                          franjaSeleccionada={franjaGrafico}
-                          onSelectFranja={f => setFranjaGrafico(prev => prev === f ? null : f)}
-                          primerIngreso={primerIngreso}
-                          ultimoIngreso={ultimoIngreso}
-                        />
+                      {label:'Sala grande',sala:'grande',obj:objG,primerIngreso:primerIngresoGrande,ultimoIngreso:ultimoIngresoGrande,descSala:descGrande},
+                      {label:'Sala chica', sala:'chica', obj:objC,primerIngreso:primerIngresoChica, ultimoIngreso:ultimoIngresoChica, descSala:descChica},
+                    ].map(({label,sala,obj,primerIngreso,ultimoIngreso,descSala})=>(
+                      <div key={sala} style={{padding:'10px 16px'}}>
+                        <GraficoHoraAHora franjas={config?generarFranjas(config):[]} produccion={produccion} objetivo={obj} config={config} sala={sala} incidencias={activas} label={label} franjaSeleccionada={franjaGrafico} onSelectFranja={f=>setFranjaGrafico(prev=>prev===f?null:f)} primerIngreso={primerIngreso} ultimoIngreso={ultimoIngreso} descSala={descSala} />
                       </div>
                     ))}
                   </div>
-                  {franjaGrafico && <PanelSinSala franja={franjaGrafico} incidencias={activas} onClose={() => setFranjaGrafico(null)} />}
+                  {franjaGrafico && <PanelSinSala franja={franjaGrafico} incidencias={activas} onClose={()=>setFranjaGrafico(null)} />}
                 </>
               )}
             </div>
           )}
 
           <div>
-            <div onClick={() => setIncidenciasExpandido(!incidenciasExpandido)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', cursor: 'pointer', background: '#fff', borderBottom: '1px solid #E8E8E5', userSelect: 'none' }}
-              onMouseEnter={e => e.currentTarget.style.background='#FAFAF8'}
-              onMouseLeave={e => e.currentTarget.style.background='#fff'}>
-              <span style={{ fontSize: '10px', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-                Incidencias {hayFiltros ? `(${incsFiltradas.length} filtradas)` : `(${activas.length})`}
-              </span>
-              <span style={{ fontSize: '10px', color: '#ccc', transform: incidenciasExpandido ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform .2s' }}>▼</span>
+            <div onClick={()=>setIncidenciasExpandido(!incidenciasExpandido)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 18px',cursor:'pointer',background:'#fff',borderBottom:'1px solid #E8E8E5',userSelect:'none'}} onMouseEnter={e=>e.currentTarget.style.background='#FAFAF8'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+              <span style={{fontSize:'10px',fontWeight:'700',color:'#999',textTransform:'uppercase',letterSpacing:'.08em'}}>Incidencias {hayFiltros?`(${incsFiltradas.length} filtradas)`:`(${activas.length})`}</span>
+              <span style={{fontSize:'10px',color:'#ccc',transform:incidenciasExpandido?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>▼</span>
             </div>
             {incidenciasExpandido && (
-              <div style={{ padding: '12px 18px' }}>
-                {franjasFiltradas.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '2.5rem', color: '#ccc', fontSize: '13px' }}>
-                    {hayFiltros ? 'Sin incidencias con los filtros aplicados' : 'Sin incidencias registradas en el turno'}
-                  </div>
-                ) : franjasFiltradas.map(franja => (
-                  <div key={franja} style={{ marginBottom: '12px' }}>
-                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '6px' }}>
-                      {(franja || '').replace('-', ' — ')}
+              <div style={{padding:'12px 18px'}}>
+                {franjasFiltradas.length===0
+                  ?<div style={{textAlign:'center',padding:'2.5rem',color:'#ccc',fontSize:'13px'}}>{hayFiltros?'Sin incidencias con los filtros aplicados':'Sin incidencias registradas en el turno'}</div>
+                  :franjasFiltradas.map(franja=>(
+                    <div key={franja} style={{marginBottom:'12px'}}>
+                      <div style={{fontSize:'10px',fontWeight:'700',color:'#bbb',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:'6px'}}>{(franja||'').replace('-',' — ')}</div>
+                      {incsFiltradas.filter(i=>i.franja===franja).map(inc=>(
+                        <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id===ultimaIncId} />
+                      ))}
                     </div>
-                    {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
-                      <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id === ultimaIncId} />
-                    ))}
-                  </div>
-                ))}
+                  ))
+                }
               </div>
             )}
           </div>
         </div>
 
-        {sectoresConInc.length > 0 && (
-          <div style={{ padding: '16px 14px' }}>
-            <div style={{ fontSize: '9px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '10px' }}>Sectores · click filtra · doble click detalle</div>
-            {sectoresConInc.map(s => (
-              <SectorCard key={s} sector={s} incs={activas.filter(i => i.sectoresResponsables?.includes(s))} seleccionado={sectorFiltro === s} onClick={() => toggleSector(s)} onDobleClick={() => setSectorDetalle(s)} />
-            ))}
+        {sectoresConInc.length>0&&(
+          <div style={{padding:'16px 14px'}}>
+            <div style={{fontSize:'9px',fontWeight:'700',color:'#bbb',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:'10px'}}>Sectores · click filtra · doble click detalle</div>
+            {sectoresConInc.map(s=><SectorCard key={s} sector={s} incs={activas.filter(i=>i.sectoresResponsables?.includes(s))} seleccionado={sectorFiltro===s} onClick={()=>toggleSector(s)} onDobleClick={()=>setSectorDetalle(s)} />)}
           </div>
         )}
       </div>
@@ -355,17 +292,20 @@ export default function Tablero({ user, userData, onVerInforme }) {
 }
 
 
-function getDescansoParcial(franja, config) {
-  if (!config || !franja) return 0
+function getDescansoParcial(franja, config, descSala) {
+  if (!franja) return 0
   const hFranja = parseInt(franja.split(':')[0])
   let minDesc = 0
-  for (const d of [
-    { hora: config.descanso1Hora, min: config.descanso1Min || 0, dur: config.descanso1Dur || 0 },
-    { hora: config.descanso2Hora, min: config.descanso2Min || 0, dur: config.descanso2Dur || 0 },
-  ]) {
-    if (d.hora === undefined || d.dur === 0) continue
-    const dIni = d.hora * 60 + d.min
-    const dFin = dIni + d.dur
+  const descansos = descSala
+    ? [descSala]
+    : config ? [
+        { hora: config.descanso1Hora, min: config.descanso1Min || 0, dur: config.descanso1Dur || 0 },
+        { hora: config.descanso2Hora, min: config.descanso2Min || 0, dur: config.descanso2Dur || 0 },
+      ] : []
+  for (const d of descansos) {
+    if (d.hora === undefined || d.hora === null || d.hora === '' || !d.dur) continue
+    const dIni = Number(d.hora) * 60 + Number(d.min || 0)
+    const dFin = dIni + Number(d.dur)
     const fIni = hFranja * 60
     const fFin = fIni + 60
     minDesc += Math.max(0, Math.min(dFin, fFin) - Math.max(dIni, fIni))
@@ -373,7 +313,7 @@ function getDescansoParcial(franja, config) {
   return minDesc
 }
 
-function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, incidencias, label, franjaSeleccionada, onSelectFranja, primerIngreso, ultimoIngreso }) {
+function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, incidencias, label, franjaSeleccionada, onSelectFranja, primerIngreso, ultimoIngreso, descSala }) {
   const W = 500, H = 160, PT = 26, PB = 34, PX = 4
   const n = franjas.length
   if (n === 0) return null
@@ -386,89 +326,78 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
   function objFranja(f) {
     if (f === primeraFranja && primerIngreso) return null
     if (f === ultimaFranja  && ultimoIngreso) return null
-    const mDesc = getDescansoParcial(f, config)
+    const mDesc = getDescansoParcial(f, config, descSala)
     return Math.round(objetivo * (60 - mDesc) / 60)
   }
 
   const vals = franjas.map(f => produccion[f]?.[sala]).filter(v => v != null)
   const maxVal = Math.max(...franjas.map(f => objFranja(f)).filter(v => v != null), ...vals, 1) * 1.35
-
   const totalProd = Object.values(produccion).reduce((a, p) => a + (p[sala] || 0), 0)
-  const franjasConObj = franjas.filter(f => getDescansoParcial(f, config) < 60 && objFranja(f) != null)
+  const franjasConObj = franjas.filter(f => getDescansoParcial(f, config, descSala) < 60 && objFranja(f) != null)
   const objTotal = objetivo * franjasConObj.length
   const pct = objTotal > 0 ? Math.round(totalProd / objTotal * 100) : 0
   const deltaTotal = totalProd - objTotal
-
-  const incsFranja = franjaSeleccionada
-    ? (incidencias || []).filter(i => i.franja === franjaSeleccionada && (i.sala === sala || i.sala === 'ambas'))
-    : []
+  const incsFranja = franjaSeleccionada ? (incidencias||[]).filter(i=>i.franja===franjaSeleccionada&&(i.sala===sala||i.sala==='ambas')) : []
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '8px' }}>
-        <span style={{ fontSize: '11px', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '.07em' }}>{label}</span>
-        <span style={{ fontSize: '20px', fontWeight: '800', color: '#111', letterSpacing: '-0.5px' }}>{totalProd.toLocaleString('es-AR')}</span>
-        <span style={{ fontSize: '11px', color: '#bbb' }}>de {objTotal.toLocaleString('es-AR')}</span>
-        <span style={{ fontSize: '13px', fontWeight: '700', color: pct >= 100 ? '#1D9E75' : '#E24B4A' }}>{pct}%</span>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: pct >= 100 ? '#1D9E75' : '#E24B4A' }}>{deltaTotal >= 0 ? '+' : ''}{deltaTotal.toLocaleString('es-AR')}</span>
+      <div style={{display:'flex',alignItems:'baseline',gap:'12px',marginBottom:'8px'}}>
+        <span style={{fontSize:'11px',fontWeight:'700',color:'#888',textTransform:'uppercase',letterSpacing:'.07em'}}>{label}</span>
+        <span style={{fontSize:'20px',fontWeight:'800',color:'#111',letterSpacing:'-0.5px'}}>{totalProd.toLocaleString('es-AR')}</span>
+        <span style={{fontSize:'11px',color:'#bbb'}}>de {objTotal.toLocaleString('es-AR')}</span>
+        <span style={{fontSize:'13px',fontWeight:'700',color:pct>=100?'#1D9E75':'#E24B4A'}}>{pct}%</span>
+        <span style={{fontSize:'11px',fontWeight:'600',color:pct>=100?'#1D9E75':'#E24B4A'}}>{deltaTotal>=0?'+':''}{deltaTotal.toLocaleString('es-AR')}</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', cursor: 'pointer' }}>
-        {franjas.map((franja, i) => {
-          const x = PX + i * slot
-          const xc = x + slot / 2
-          const mDesc = getDescansoParcial(franja, config)
-          const objF = objFranja(franja)
-          const yObj = objF != null ? PT + chartH - Math.round((objF / maxVal) * chartH) : null
-          const val = produccion[franja]?.[sala]
-          const hora = (franja || '').split(':')[0].replace(/^0/, '')
-          const sel = franjaSeleccionada === franja
-          const tieneIncs = (incidencias || []).some(i => i.franja === franja && (i.sala === sala || i.sala === 'ambas'))
-          const lineEl = yObj != null ? <line key={`l${i}`} x1={x+1} y1={yObj} x2={x+barW+1} y2={yObj} stroke="#D4C8B4" strokeWidth="1" strokeDasharray="3 2" /> : null
-          const bgEl = sel ? <rect key={`bg${i}`} x={x} y={0} width={slot} height={H} fill="#f0f6ff" /> : null
-          if (val == null) return (
-            <g key={franja} onClick={() => onSelectFranja && onSelectFranja(franja)}>
-              {bgEl}{lineEl}
-              <text x={xc} y={H-PB+16} textAnchor="middle" fontSize="11" fontWeight="600" fill={sel ? '#185FA5' : '#CCC'} fontFamily="system-ui">{hora}</text>
-              {tieneIncs && <circle cx={xc} cy={H-PB+28} r="2.5" fill="#E24B4A" />}
-            </g>
-          )
-          const sobre = objF != null ? val >= objF : null
-          const color = sobre === true ? '#1D9E75' : sobre === false ? '#E24B4A' : '#888'
-          const bH = Math.max(6, Math.round((val / maxVal) * chartH))
-          const delta = objF != null ? val - objF : null
-          const overlayH = Math.round(bH * (mDesc / 60))
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}}>
+        {franjas.map((franja,i)=>{
+          const x=PX+i*slot, xc=x+slot/2
+          const mDesc=getDescansoParcial(franja,config,descSala)
+          const objF=objFranja(franja)
+          const yObj=objF!=null?PT+chartH-Math.round((objF/maxVal)*chartH):null
+          const val=produccion[franja]?.[sala]
+          const hora=(franja||'').split(':')[0].replace(/^0/,'')
+          const sel=franjaSeleccionada===franja
+          const tieneIncs=(incidencias||[]).some(i=>i.franja===franja&&(i.sala===sala||i.sala==='ambas'))
+          const lineEl=yObj!=null?<line key={`l${i}`} x1={x+1} y1={yObj} x2={x+barW+1} y2={yObj} stroke="#D4C8B4" strokeWidth="1" strokeDasharray="3 2"/>:null
+          const bgEl=sel?<rect key={`bg${i}`} x={x} y={0} width={slot} height={H} fill="#f0f6ff"/>:null
+          if(val==null) return <g key={franja} onClick={()=>onSelectFranja&&onSelectFranja(franja)}>{bgEl}{lineEl}<text x={xc} y={H-PB+16} textAnchor="middle" fontSize="11" fontWeight="600" fill={sel?'#185FA5':'#CCC'} fontFamily="system-ui">{hora}</text>{tieneIncs&&<circle cx={xc} cy={H-PB+28} r="2.5" fill="#E24B4A"/>}</g>
+          const sobre=objF!=null?val>=objF:null
+          const color=sobre===true?'#1D9E75':sobre===false?'#E24B4A':'#888'
+          const bH=Math.max(6,Math.round((val/maxVal)*chartH))
+          const delta=objF!=null?val-objF:null
+          const overlayH=Math.round(bH*(mDesc/60))
           return (
-            <g key={franja} onClick={() => onSelectFranja && onSelectFranja(franja)} style={{ cursor: 'pointer' }}>
+            <g key={franja} onClick={()=>onSelectFranja&&onSelectFranja(franja)} style={{cursor:'pointer'}}>
               {bgEl}{lineEl}
-              <rect x={x+2} y={PT+chartH-bH} width={barW} height={bH} fill={color} rx="3" opacity={sel ? 1 : .82} />
-              {sel && <rect x={x+2} y={PT+chartH-bH} width={barW} height={bH} fill="none" stroke={color} strokeWidth="2" rx="3" />}
-              {mDesc > 0 && overlayH > 0 && <rect x={x+2} y={PT+chartH-bH} width={barW} height={overlayH} fill="#B0B0A8" rx="3" opacity=".75" />}
+              <rect x={x+2} y={PT+chartH-bH} width={barW} height={bH} fill={color} rx="3" opacity={sel?1:.82}/>
+              {sel&&<rect x={x+2} y={PT+chartH-bH} width={barW} height={bH} fill="none" stroke={color} strokeWidth="2" rx="3"/>}
+              {mDesc>0&&overlayH>0&&<rect x={x+2} y={PT+chartH-bH} width={barW} height={overlayH} fill="#B0B0A8" rx="3" opacity=".75"/>}
               <text x={xc} y={PT+chartH-bH-5} textAnchor="middle" fontSize="11" fill={color} fontWeight="700" fontFamily="system-ui">{val}</text>
-              <text x={xc} y={H-PB+16} textAnchor="middle" fontSize="11" fontWeight="700" fill={sel ? '#185FA5' : '#555'} fontFamily="system-ui">{hora}</text>
-              {delta != null && <text x={xc} y={H-PB+27} textAnchor="middle" fontSize="9" fill={sobre ? '#1D9E75' : '#E24B4A'} fontWeight="700" fontFamily="system-ui">{delta>=0?`+${delta}`:delta}</text>}
+              <text x={xc} y={H-PB+16} textAnchor="middle" fontSize="11" fontWeight="700" fill={sel?'#185FA5':'#555'} fontFamily="system-ui">{hora}</text>
+              {delta!=null&&<text x={xc} y={H-PB+27} textAnchor="middle" fontSize="9" fill={sobre?'#1D9E75':'#E24B4A'} fontWeight="700" fontFamily="system-ui">{delta>=0?`+${delta}`:delta}</text>}
             </g>
           )
         })}
       </svg>
-      {franjaSeleccionada && (
-        <div style={{ background: '#F8FBFF', border: '1.5px solid #C8DCF5', borderRadius: '10px', padding: '10px 14px', marginTop: '4px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#185FA5', textTransform: 'uppercase', letterSpacing: '.06em' }}>{(franjaSeleccionada || '').replace('-', ' — ')}</span>
-            <span onClick={() => onSelectFranja && onSelectFranja(franjaSeleccionada)} style={{ fontSize: '11px', color: '#aaa', cursor: 'pointer' }}>×</span>
+      {franjaSeleccionada&&(
+        <div style={{background:'#F8FBFF',border:'1.5px solid #C8DCF5',borderRadius:'10px',padding:'10px 14px',marginTop:'4px'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+            <span style={{fontSize:'11px',fontWeight:'700',color:'#185FA5',textTransform:'uppercase',letterSpacing:'.06em'}}>{(franjaSeleccionada||'').replace('-',' — ')}</span>
+            <span onClick={()=>onSelectFranja&&onSelectFranja(franjaSeleccionada)} style={{fontSize:'11px',color:'#aaa',cursor:'pointer'}}>×</span>
           </div>
-          {incsFranja.length === 0
-            ? <div style={{ fontSize: '12px', color: '#bbb', padding: '4px 0' }}>Sin incidencias en esta franja para {label.toLowerCase()}</div>
-            : incsFranja.map(inc => {
-                const [h1,m1] = (inc.horaInicio||'0:0').split(':').map(Number)
-                const [h2,m2] = (inc.horaFin||'0:0').split(':').map(Number)
-                const dur = inc.horaFin ? Math.max(0,(h2*60+m2)-(h1*60+m1)) : null
-                return (
-                  <div key={inc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid #E8F0FB' }}>
-                    <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
-                    <span style={{ fontSize: '11px', color: '#888', minWidth: '38px' }}>{inc.horaInicio}</span>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#222', flex: 1 }}>{inc.categoriaNombre}</span>
-                    <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: gradoBg[inc.grado], color: gradoColor[inc.grado], fontWeight: '700' }}>{inc.grado}</span>
-                    {dur !== null && dur > 0 && <span style={{ fontSize: '11px', color: '#aaa' }}>{dur}m</span>}
+          {incsFranja.length===0
+            ?<div style={{fontSize:'12px',color:'#bbb',padding:'4px 0'}}>Sin incidencias en esta franja para {label.toLowerCase()}</div>
+            :incsFranja.map(inc=>{
+                const [h1,m1]=(inc.horaInicio||'0:0').split(':').map(Number)
+                const [h2,m2]=(inc.horaFin||'0:0').split(':').map(Number)
+                const dur=inc.horaFin?Math.max(0,(h2*60+m2)-(h1*60+m1)):null
+                return(
+                  <div key={inc.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'6px 0',borderBottom:'1px solid #E8F0FB'}}>
+                    <div style={{width:'7px',height:'7px',borderRadius:'50%',background:gradoColor[inc.grado],flexShrink:0}}/>
+                    <span style={{fontSize:'11px',color:'#888',minWidth:'38px'}}>{inc.horaInicio}</span>
+                    <span style={{fontSize:'12px',fontWeight:'600',color:'#222',flex:1}}>{inc.categoriaNombre}</span>
+                    <span style={{fontSize:'10px',padding:'2px 7px',borderRadius:'20px',background:gradoBg[inc.grado],color:gradoColor[inc.grado],fontWeight:'700'}}>{inc.grado}</span>
+                    {dur!==null&&dur>0&&<span style={{fontSize:'11px',color:'#aaa'}}>{dur}m</span>}
                   </div>
                 )
               })
@@ -480,29 +409,28 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
 }
 
 function PanelSinSala({ franja, incidencias, onClose }) {
-  const incs = incidencias.filter(i => i.franja === franja && (!i.sala || i.sala === ''))
+  const incs = incidencias.filter(i=>i.franja===franja&&(!i.sala||i.sala===''))
   return (
-    <div style={{ margin: '0 16px 12px', background: '#FFFBF0', border: '1.5px solid #F5E6B0', borderRadius: '10px', padding: '10px 14px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <span style={{ fontSize: '11px', fontWeight: '700', color: '#BA7517', textTransform: 'uppercase', letterSpacing: '.06em' }}>Sin sala · {(franja || '').replace('-', ' — ')}</span>
-        <span onClick={onClose} style={{ fontSize: '11px', color: '#aaa', cursor: 'pointer' }}>×</span>
+    <div style={{margin:'0 16px 12px',background:'#FFFBF0',border:'1.5px solid #F5E6B0',borderRadius:'10px',padding:'10px 14px'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+        <span style={{fontSize:'11px',fontWeight:'700',color:'#BA7517',textTransform:'uppercase',letterSpacing:'.06em'}}>Sin sala · {(franja||'').replace('-',' — ')}</span>
+        <span onClick={onClose} style={{fontSize:'11px',color:'#aaa',cursor:'pointer'}}>×</span>
       </div>
-      {incs.length === 0
-        ? <div style={{ fontSize: '12px', color: '#bbb' }}>Sin incidencias sin sala en esta franja</div>
-        : incs.map(inc => {
-            const [h1,m1] = (inc.horaInicio||'0:0').split(':').map(Number)
-            const [h2,m2] = (inc.horaFin||'0:0').split(':').map(Number)
-            const dur = inc.horaFin ? Math.max(0,(h2*60+m2)-(h1*60+m1)) : null
-            return (
-              <div key={inc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid #F5E6B0' }}>
-                <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
-                <span style={{ fontSize: '11px', color: '#888', minWidth: '38px' }}>{inc.horaInicio}</span>
-                <span style={{ fontSize: '12px', fontWeight: '600', color: '#222', flex: 1 }}>{inc.categoriaNombre}</span>
-                <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: gradoBg[inc.grado], color: gradoColor[inc.grado], fontWeight: '700' }}>{inc.grado}</span>
-                {dur !== null && dur > 0 && <span style={{ fontSize: '11px', color: '#aaa' }}>{dur}m</span>}
-              </div>
-            )
-          })
+      {incs.length===0?<div style={{fontSize:'12px',color:'#bbb'}}>Sin incidencias sin sala en esta franja</div>
+        :incs.map(inc=>{
+          const [h1,m1]=(inc.horaInicio||'0:0').split(':').map(Number)
+          const [h2,m2]=(inc.horaFin||'0:0').split(':').map(Number)
+          const dur=inc.horaFin?Math.max(0,(h2*60+m2)-(h1*60+m1)):null
+          return(
+            <div key={inc.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'6px 0',borderBottom:'1px solid #F5E6B0'}}>
+              <div style={{width:'7px',height:'7px',borderRadius:'50%',background:gradoColor[inc.grado],flexShrink:0}}/>
+              <span style={{fontSize:'11px',color:'#888',minWidth:'38px'}}>{inc.horaInicio}</span>
+              <span style={{fontSize:'12px',fontWeight:'600',color:'#222',flex:1}}>{inc.categoriaNombre}</span>
+              <span style={{fontSize:'10px',padding:'2px 7px',borderRadius:'20px',background:gradoBg[inc.grado],color:gradoColor[inc.grado],fontWeight:'700'}}>{inc.grado}</span>
+              {dur!==null&&dur>0&&<span style={{fontSize:'11px',color:'#aaa'}}>{dur}m</span>}
+            </div>
+          )
+        })
       }
     </div>
   )
@@ -733,178 +661,94 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
   const [busqCat, setBusqCat] = useState('')
   const [catOpen, setCatOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-
   const lineasOpts = sala === 'chica' ? ['L5'] : ['L2','L3','L4']
   const catsFiltradas = categorias.filter(c => c.nombre.toLowerCase().includes(busqCat.toLowerCase()))
   function toggleLinea(l) { setLineas(p => p.includes(l) ? p.filter(x => x !== l) : [...p, l]) }
   function addTag() { if (!tagInput.trim()) return; setEtiquetas(p => [...p, tagInput.trim()]); setTagInput('') }
-
   function BuscadorSector({ seleccionados, setSeleccionados, busq, setBusq, placeholder }) {
     const filtrados = busq.length > 0 ? sectores.filter(s => s.toLowerCase().includes(busq.toLowerCase())) : []
     return (
       <div>
-        <div style={{ position: 'relative' }}>
-          <input value={busq} onChange={e => setBusq(e.target.value)} placeholder={placeholder}
-            style={{ width: '100%', fontSize: '12px', padding: '8px 12px', borderRadius: '9px', border: '1.5px solid #e8e8e8', background: '#fafafa', boxSizing: 'border-box' }} />
-          {busq && <span onClick={() => setBusq('')} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#bbb' }}>×</span>}
+        <div style={{position:'relative'}}>
+          <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder={placeholder} style={{width:'100%',fontSize:'12px',padding:'8px 12px',borderRadius:'9px',border:'1.5px solid #e8e8e8',background:'#fafafa',boxSizing:'border-box'}}/>
+          {busq&&<span onClick={()=>setBusq('')} style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#bbb'}}>×</span>}
         </div>
-        {busq.length > 0 && filtrados.length > 0 && (
-          <div style={{ border: '1.5px solid #185FA5', borderRadius: '9px', overflow: 'hidden', marginTop: '4px', maxHeight: '150px', overflowY: 'auto', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
-            {filtrados.map(s => (
-              <div key={s} onClick={() => { setSeleccionados(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]); setBusq('') }}
-                style={{ padding: '8px 12px', fontSize: '12px', cursor: 'pointer', background: seleccionados.includes(s) ? '#f0f6ff' : '#fff', borderBottom: '1px solid #f5f5f5', color: seleccionados.includes(s) ? '#185FA5' : '#333', fontWeight: seleccionados.includes(s) ? '600' : '400' }}>
-                {seleccionados.includes(s) ? '✓ ' : ''}{s}
-              </div>
-            ))}
-          </div>
-        )}
-        {seleccionados.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '6px' }}>
-            {seleccionados.map(r => (
-              <span key={r} style={{ fontSize: '11px', padding: '3px 8px 3px 10px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', border: '1px solid #b5d4f4', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {r} <span onClick={() => setSeleccionados(p => p.filter(x => x !== r))} style={{ cursor: 'pointer', opacity: .6 }}>×</span>
-              </span>
-            ))}
-          </div>
-        )}
+        {busq.length>0&&filtrados.length>0&&<div style={{border:'1.5px solid #185FA5',borderRadius:'9px',overflow:'hidden',marginTop:'4px',maxHeight:'150px',overflowY:'auto',background:'#fff',boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>{filtrados.map(s=><div key={s} onClick={()=>{setSeleccionados(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);setBusq('')}} style={{padding:'8px 12px',fontSize:'12px',cursor:'pointer',background:seleccionados.includes(s)?'#f0f6ff':'#fff',borderBottom:'1px solid #f5f5f5',color:seleccionados.includes(s)?'#185FA5':'#333',fontWeight:seleccionados.includes(s)?'600':'400'}}>{seleccionados.includes(s)?'✓ ':''}{s}</div>)}</div>}
+        {seleccionados.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:'5px',marginTop:'6px'}}>{seleccionados.map(r=><span key={r} style={{fontSize:'11px',padding:'3px 8px 3px 10px',borderRadius:'20px',background:'#f0f6ff',color:'#185FA5',border:'1px solid #b5d4f4',display:'flex',alignItems:'center',gap:'4px'}}>{r} <span onClick={()=>setSeleccionados(p=>p.filter(x=>x!==r))} style={{cursor:'pointer',opacity:.6}}>×</span></span>)}</div>}
       </div>
     )
   }
-
   async function guardar() {
     setSaving(true)
-    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id), {
-      grado, descripcion, categoriaId: categoria, categoriaNombre,
-      sectoresResponsables: responsables, sectoresAfectados: afectados,
-      causaExterna, sala, lineas, horaInicio, horaFin: horaFin || null,
-      franja, etiquetas, editadoPor: userData.nombre, editadoEn: serverTimestamp()
-    })
-    await addDoc(collection(db,'log'), { accion: 'editar_incidencia', turnoId, recursoId: inc.id, usuarioNombre: userData.nombre, datos: { gradoAnterior: inc.grado, descripcionAnterior: inc.descripcion }, timestamp: serverTimestamp() })
+    await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id),{grado,descripcion,categoriaId:categoria,categoriaNombre,sectoresResponsables:responsables,sectoresAfectados:afectados,causaExterna,sala,lineas,horaInicio,horaFin:horaFin||null,franja,etiquetas,editadoPor:userData.nombre,editadoEn:serverTimestamp()})
+    await addDoc(collection(db,'log'),{accion:'editar_incidencia',turnoId,recursoId:inc.id,usuarioNombre:userData.nombre,datos:{gradoAnterior:inc.grado,descripcionAnterior:inc.descripcion},timestamp:serverTimestamp()})
     setSaving(false); onClose()
   }
-
-  const lbl = (t, opt) => (
-    <div style={{ fontSize: '11px', fontWeight: '600', color: '#666', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '7px' }}>
-      {t}{opt && <span style={{ fontSize: '10px', color: '#bbb', fontWeight: '400', marginLeft: '5px', textTransform: 'none' }}>opcional</span>}
-    </div>
-  )
-
+  const lbl=(t,opt)=><div style={{fontSize:'11px',fontWeight:'600',color:'#666',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:'7px'}}>{t}{opt&&<span style={{fontSize:'10px',color:'#bbb',fontWeight:'400',marginLeft:'5px',textTransform:'none'}}>opcional</span>}</div>
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '680px', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: '18px', zIndex: 21, fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
-        <div style={{ padding: '22px 28px 18px', borderBottom: '1px solid #F0F0EE', position: 'sticky', top: 0, background: '#fff', zIndex: 2, borderRadius: '18px 18px 0 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: '17px', fontWeight: '700', color: '#111' }}>Editar incidencia</div>
-              <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px' }}>{inc.horaInicio} · {(inc.franja||'').replace('-',' — ')}</div>
-            </div>
-            <button onClick={onClose} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', fontSize: '18px', color: '#888' }}>×</button>
+      <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.3)',zIndex:20}}/>
+      <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:'680px',maxHeight:'92vh',overflowY:'auto',background:'#fff',borderRadius:'18px',zIndex:21,fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif',boxShadow:'0 20px 60px rgba(0,0,0,0.18)'}}>
+        <div style={{padding:'22px 28px 18px',borderBottom:'1px solid #F0F0EE',position:'sticky',top:0,background:'#fff',zIndex:2,borderRadius:'18px 18px 0 0'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div><div style={{fontSize:'17px',fontWeight:'700',color:'#111'}}>Editar incidencia</div><div style={{fontSize:'11px',color:'#aaa',marginTop:'2px'}}>{inc.horaInicio} · {(inc.franja||'').replace('-',' — ')}</div></div>
+            <button onClick={onClose} style={{width:'32px',height:'32px',borderRadius:'8px',border:'1px solid #e8e8e8',background:'#fafafa',cursor:'pointer',fontSize:'18px',color:'#888'}}>×</button>
           </div>
         </div>
-        <div style={{ padding: '22px 28px 28px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div style={{padding:'22px 28px 28px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
             <div>
               {lbl('Categoría')}
-              <div style={{ position: 'relative' }}>
-                <div onClick={() => setCatOpen(!catOpen)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', border: `1.5px solid ${catOpen ? '#185FA5' : '#e8e8e8'}`, background: '#fff', cursor: 'pointer', fontSize: '13px', color: categoriaNombre ? '#111' : '#bbb' }}>
-                  <span>{categoriaNombre || 'Seleccioná...'}</span>
-                  <span style={{ fontSize: '9px', color: '#bbb', transform: catOpen ? 'rotate(180deg)' : 'none', display: 'inline-block' }}>▼</span>
+              <div style={{position:'relative'}}>
+                <div onClick={()=>setCatOpen(!catOpen)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 12px',borderRadius:'10px',border:`1.5px solid ${catOpen?'#185FA5':'#e8e8e8'}`,background:'#fff',cursor:'pointer',fontSize:'13px',color:categoriaNombre?'#111':'#bbb'}}>
+                  <span>{categoriaNombre||'Seleccioná...'}</span>
+                  <span style={{fontSize:'9px',color:'#bbb',transform:catOpen?'rotate(180deg)':'none',display:'inline-block'}}>▼</span>
                 </div>
-                {catOpen && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: '#fff', border: '1.5px solid #185FA5', borderRadius: '10px', marginTop: '4px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
-                    <div style={{ padding: '8px' }}>
-                      <input autoFocus value={busqCat} onChange={e => setBusqCat(e.target.value)} placeholder="Buscar..." style={{ width: '100%', fontSize: '12px', borderRadius: '7px', border: '1px solid #e8e8e8', padding: '6px 10px', boxSizing: 'border-box' }} />
-                    </div>
-                    <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
-                      {catsFiltradas.map(c => (
-                        <div key={c.id} onClick={() => { setCategoria(c.id); setCategoriaNombre(c.nombre); setCatOpen(false); setBusqCat('') }} style={{ padding: '8px 14px', fontSize: '13px', cursor: 'pointer', background: categoria === c.id ? '#f0f6ff' : '#fff', color: categoria === c.id ? '#185FA5' : '#333', fontWeight: categoria === c.id ? '600' : '400', borderBottom: '1px solid #f5f5f5', display: 'flex', justifyContent: 'space-between' }}>
-                          {c.nombre}{categoria === c.id && <span>✓</span>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {catOpen&&<div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:10,background:'#fff',border:'1.5px solid #185FA5',borderRadius:'10px',marginTop:'4px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',overflow:'hidden'}}>
+                  <div style={{padding:'8px'}}><input autoFocus value={busqCat} onChange={e=>setBusqCat(e.target.value)} placeholder="Buscar..." style={{width:'100%',fontSize:'12px',borderRadius:'7px',border:'1px solid #e8e8e8',padding:'6px 10px',boxSizing:'border-box'}}/></div>
+                  <div style={{maxHeight:'180px',overflowY:'auto'}}>{catsFiltradas.map(c=><div key={c.id} onClick={()=>{setCategoria(c.id);setCategoriaNombre(c.nombre);setCatOpen(false);setBusqCat('')}} style={{padding:'8px 14px',fontSize:'13px',cursor:'pointer',background:categoria===c.id?'#f0f6ff':'#fff',color:categoria===c.id?'#185FA5':'#333',fontWeight:categoria===c.id?'600':'400',borderBottom:'1px solid #f5f5f5',display:'flex',justifyContent:'space-between'}}>{c.nombre}{categoria===c.id&&<span>✓</span>}</div>)}</div>
+                </div>}
               </div>
             </div>
             <div>
               {lbl('Grado')}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                {Object.entries(gradoColor).map(([g, c]) => (
-                  <button key={g} onClick={() => setGrado(g)} style={{ padding: '7px 8px', fontSize: '12px', fontWeight: grado === g ? '700' : '400', borderRadius: '8px', border: `1.5px solid ${grado === g ? c : '#e8e8e8'}`, background: grado === g ? c + '18' : '#fafafa', color: grado === g ? c : '#888', cursor: 'pointer', textTransform: 'capitalize' }}>{g}</button>
-                ))}
-              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>{Object.entries(gradoColor).map(([g,c])=><button key={g} onClick={()=>setGrado(g)} style={{padding:'7px 8px',fontSize:'12px',fontWeight:grado===g?'700':'400',borderRadius:'8px',border:`1.5px solid ${grado===g?c:'#e8e8e8'}`,background:grado===g?c+'18':'#fafafa',color:grado===g?c:'#888',cursor:'pointer',textTransform:'capitalize'}}>{g}</button>)}</div>
             </div>
           </div>
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{marginBottom:'20px'}}>
             {lbl('Descripción')}
-            <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} style={{ width: '100%', fontSize: '13px', minHeight: '70px', resize: 'vertical', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '9px 12px', fontFamily: 'inherit', lineHeight: '1.5', boxSizing: 'border-box' }} />
+            <textarea value={descripcion} onChange={e=>setDescripcion(e.target.value)} style={{width:'100%',fontSize:'13px',minHeight:'70px',resize:'vertical',borderRadius:'10px',border:'1.5px solid #e8e8e8',padding:'9px 12px',fontFamily:'inherit',lineHeight:'1.5',boxSizing:'border-box'}}/>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
             <div>
-              {lbl('Sala', true)}
-              <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
-                {['grande','chica','ambas'].map(s => (
-                  <button key={s} onClick={() => { setSala(sala === s ? '' : s); setLineas([]) }} style={{ flex: 1, padding: '7px 4px', fontSize: '11px', fontWeight: sala === s ? '700' : '400', borderRadius: '8px', border: `1.5px solid ${sala === s ? '#185FA5' : '#e8e8e8'}`, background: sala === s ? '#185FA5' : '#fafafa', color: sala === s ? '#fff' : '#666', cursor: 'pointer' }}>
-                    {s === 'grande' ? 'Grande' : s === 'chica' ? 'Chica' : 'Ambas'}
-                  </button>
-                ))}
-              </div>
-              {sala && (<>
-                {lbl('Líneas', true)}
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {lineasOpts.map(l => (
-                    <button key={l} onClick={() => toggleLinea(l)} style={{ padding: '5px 14px', fontSize: '12px', borderRadius: '20px', border: `1.5px solid ${lineas.includes(l) ? '#BA7517' : '#e8e8e8'}`, background: lineas.includes(l) ? '#fff8ee' : '#fafafa', color: lineas.includes(l) ? '#BA7517' : '#888', cursor: 'pointer' }}>{l}</button>
-                  ))}
-                </div>
-              </>)}
+              {lbl('Sala',true)}
+              <div style={{display:'flex',gap:'6px',marginBottom:'10px'}}>{['grande','chica','ambas'].map(s=><button key={s} onClick={()=>{setSala(sala===s?'':s);setLineas([])}} style={{flex:1,padding:'7px 4px',fontSize:'11px',fontWeight:sala===s?'700':'400',borderRadius:'8px',border:`1.5px solid ${sala===s?'#185FA5':'#e8e8e8'}`,background:sala===s?'#185FA5':'#fafafa',color:sala===s?'#fff':'#666',cursor:'pointer'}}>{s==='grande'?'Grande':s==='chica'?'Chica':'Ambas'}</button>)}</div>
+              {sala&&<><div style={{fontSize:'11px',fontWeight:'600',color:'#666',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:'7px'}}>Líneas <span style={{fontSize:'10px',color:'#bbb',fontWeight:'400',textTransform:'none'}}>opcional</span></div><div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>{lineasOpts.map(l=><button key={l} onClick={()=>toggleLinea(l)} style={{padding:'5px 14px',fontSize:'12px',borderRadius:'20px',border:`1.5px solid ${lineas.includes(l)?'#BA7517':'#e8e8e8'}`,background:lineas.includes(l)?'#fff8ee':'#fafafa',color:lineas.includes(l)?'#BA7517':'#888',cursor:'pointer'}}>{l}</button>)}</div></>}
             </div>
             <div>
               {lbl('Horario')}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-                <div>
-                  <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px' }}>Inicio</div>
-                  <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} style={{ width: '100%', fontSize: '13px', borderRadius: '9px', border: '1.5px solid #e8e8e8', padding: '7px 10px', boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px' }}>Fin <span style={{ color: '#bbb' }}>opcional</span></div>
-                  <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} style={{ width: '100%', fontSize: '13px', borderRadius: '9px', border: '1.5px solid #e8e8e8', padding: '7px 10px', boxSizing: 'border-box' }} />
-                </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'10px'}}>
+                <div><div style={{fontSize:'10px',color:'#999',marginBottom:'4px'}}>Inicio</div><input type="time" value={horaInicio} onChange={e=>setHoraInicio(e.target.value)} style={{width:'100%',fontSize:'13px',borderRadius:'9px',border:'1.5px solid #e8e8e8',padding:'7px 10px',boxSizing:'border-box'}}/></div>
+                <div><div style={{fontSize:'10px',color:'#999',marginBottom:'4px'}}>Fin <span style={{color:'#bbb'}}>opcional</span></div><input type="time" value={horaFin} onChange={e=>setHoraFin(e.target.value)} style={{width:'100%',fontSize:'13px',borderRadius:'9px',border:'1.5px solid #e8e8e8',padding:'7px 10px',boxSizing:'border-box'}}/></div>
               </div>
-              {lbl('Franja', true)}
-              <select value={franja} onChange={e => setFranja(e.target.value)} style={{ width: '100%', fontSize: '12px', borderRadius: '9px', border: '1.5px solid #e8e8e8', padding: '8px 10px', background: '#fafafa', color: '#333' }}>
-                {Array.from({length: 10}, (_,i) => { const h = String(i+4).padStart(2,'0'); const h2 = String(i+5).padStart(2,'0'); const f = `${h}:00-${h2}:00`; return <option key={f} value={f}>{h}:00 — {h2}:00</option> })}
+              {lbl('Franja',true)}
+              <select value={franja} onChange={e=>setFranja(e.target.value)} style={{width:'100%',fontSize:'12px',borderRadius:'9px',border:'1.5px solid #e8e8e8',padding:'8px 10px',background:'#fafafa',color:'#333'}}>
+                {Array.from({length:10},(_,i)=>{const h=String(i+4).padStart(2,'0');const h2=String(i+5).padStart(2,'0');const f=`${h}:00-${h2}:00`;return<option key={f} value={f}>{h}:00 — {h2}:00</option>})}
               </select>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-            <div>
-              {lbl('Sectores responsables', true)}
-              <BuscadorSector seleccionados={responsables} setSeleccionados={setResponsables} busq={busqResp} setBusq={setBusqResp} placeholder="Buscá un sector..." />
-              <button onClick={() => setCausaExterna(!causaExterna)} style={{ marginTop: '8px', fontSize: '11px', padding: '4px 12px', borderRadius: '20px', border: `1.5px ${causaExterna ? 'solid' : 'dashed'} ${causaExterna ? '#185FA5' : '#ddd'}`, background: causaExterna ? '#f0f6ff' : '#fff', color: causaExterna ? '#185FA5' : '#aaa', cursor: 'pointer' }}>🌐 Causa externa</button>
-            </div>
-            <div>
-              {lbl('Sectores afectados', true)}
-              <BuscadorSector seleccionados={afectados} setSeleccionados={setAfectados} busq={busqAfect} setBusq={setBusqAfect} placeholder="Buscá un sector..." />
-            </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
+            <div>{lbl('Sectores responsables',true)}<BuscadorSector seleccionados={responsables} setSeleccionados={setResponsables} busq={busqResp} setBusq={setBusqResp} placeholder="Buscá un sector..."/><button onClick={()=>setCausaExterna(!causaExterna)} style={{marginTop:'8px',fontSize:'11px',padding:'4px 12px',borderRadius:'20px',border:`1.5px ${causaExterna?'solid':'dashed'} ${causaExterna?'#185FA5':'#ddd'}`,background:causaExterna?'#f0f6ff':'#fff',color:causaExterna?'#185FA5':'#aaa',cursor:'pointer'}}>🌐 Causa externa</button></div>
+            <div>{lbl('Sectores afectados',true)}<BuscadorSector seleccionados={afectados} setSeleccionados={setAfectados} busq={busqAfect} setBusq={setBusqAfect} placeholder="Buscá un sector..."/></div>
           </div>
-          <div style={{ marginBottom: '24px' }}>
-            {lbl('Etiquetas', true)}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-              <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="Escribí y Enter..." style={{ flex: 1, fontSize: '12px', borderRadius: '9px', border: '1.5px solid #e8e8e8', padding: '7px 10px' }} />
-              <button onClick={addTag} style={{ fontSize: '11px', padding: '7px 12px', borderRadius: '9px', border: '1.5px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>+ Add</button>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-              {etiquetas.map((t, i) => (
-                <span key={i} style={{ fontSize: '11px', padding: '3px 8px 3px 10px', borderRadius: '20px', background: '#f5f5f5', border: '1px solid #e8e8e8', display: 'flex', alignItems: 'center', gap: '4px', color: '#555' }}>
-                  {t} <span onClick={() => setEtiquetas(p => p.filter((_,j) => j !== i))} style={{ cursor: 'pointer', opacity: .5 }}>×</span>
-                </span>
-              ))}
-            </div>
+          <div style={{marginBottom:'24px'}}>
+            {lbl('Etiquetas',true)}
+            <div style={{display:'flex',gap:'8px',marginBottom:'6px'}}><input value={tagInput} onChange={e=>setTagInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTag()} placeholder="Escribí y Enter..." style={{flex:1,fontSize:'12px',borderRadius:'9px',border:'1.5px solid #e8e8e8',padding:'7px 10px'}}/><button onClick={addTag} style={{fontSize:'11px',padding:'7px 12px',borderRadius:'9px',border:'1.5px solid #e8e8e8',background:'#fafafa',cursor:'pointer',color:'#555'}}>+ Add</button></div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:'5px'}}>{etiquetas.map((t,i)=><span key={i} style={{fontSize:'11px',padding:'3px 8px 3px 10px',borderRadius:'20px',background:'#f5f5f5',border:'1px solid #e8e8e8',display:'flex',alignItems:'center',gap:'4px',color:'#555'}}>{t} <span onClick={()=>setEtiquetas(p=>p.filter((_,j)=>j!==i))} style={{cursor:'pointer',opacity:.5}}>×</span></span>)}</div>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={onClose} style={{ flex: 1, padding: '11px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
-            <button onClick={guardar} disabled={saving} style={{ flex: 2, padding: '11px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
+          <div style={{display:'flex',gap:'8px'}}>
+            <button onClick={onClose} style={{flex:1,padding:'11px',fontSize:'13px',borderRadius:'10px',border:'1.5px solid #e8e8e8',background:'#fff',cursor:'pointer',color:'#888',fontWeight:'500'}}>Cancelar</button>
+            <button onClick={guardar} disabled={saving} style={{flex:2,padding:'11px',fontSize:'13px',fontWeight:'700',borderRadius:'10px',background:'#185FA5',color:'#fff',border:'none',cursor:'pointer'}}>{saving?'Guardando...':'Guardar cambios'}</button>
           </div>
         </div>
       </div>
