@@ -31,6 +31,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [produccion, setProduccion] = useState({})
   const [graficosExpandido, setGraficosExpandido] = useState(false)
   const [incidenciasExpandido, setIncidenciasExpandido] = useState(true)
+  const [franjaGrafico, setFranjaGrafico] = useState(null)
 
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
@@ -269,10 +270,46 @@ export default function Tablero({ user, userData, onVerInforme }) {
                         sala={sala}
                         incidencias={activas}
                         label={label}
+                        franjaSeleccionada={franjaGrafico}
+                        onSelectFranja={f => setFranjaGrafico(prev => prev === f ? null : f)}
                       />
                     </div>
                   ))}
                 </div>
+
+                {/* panel sin sala */}
+                {franjaGrafico && (() => {
+                  const incsSinSala = activas.filter(i =>
+                    i.franja === franjaGrafico &&
+                    (!i.sala || i.sala === '')
+                  )
+                  return (
+                    <div style={{ margin: '0 16px 12px', background: '#FFFBF0', border: '1.5px solid #F5E6B0', borderRadius: '10px', padding: '10px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: '700', color: '#BA7517', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                          Sin sala · {franjaGrafico.replace('-', ' — ')}
+                        </span>
+                        <span onClick={() => setFranjaGrafico(null)} style={{ fontSize: '11px', color: '#aaa', cursor: 'pointer' }}>×</span>
+                      </div>
+                      {incsSinSala.length === 0 ? (
+                        <div style={{ fontSize: '12px', color: '#bbb' }}>Sin incidencias sin sala en esta franja</div>
+                      ) : incsSinSala.map(inc => {
+                        const [h1,m1] = (inc.horaInicio||'0:0').split(':').map(Number)
+                        const [h2,m2] = (inc.horaFin||'0:0').split(':').map(Number)
+                        const dur = inc.horaFin ? Math.max(0,(h2*60+m2)-(h1*60+m1)) : null
+                        return (
+                          <div key={inc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid #F5E6B0' }}>
+                            <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: gradoColor[inc.grado], flexShrink: 0 }} />
+                            <span style={{ fontSize: '11px', color: '#888', minWidth: '38px' }}>{inc.horaInicio}</span>
+                            <span style={{ fontSize: '12px', fontWeight: '600', color: '#222', flex: 1 }}>{inc.categoriaNombre}</span>
+                            <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: gradoBg[inc.grado], color: gradoColor[inc.grado], fontWeight: '700' }}>{inc.grado}</span>
+                            {dur !== null && dur > 0 && <span style={{ fontSize: '11px', color: '#aaa' }}>{dur}m</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
               )}
             </div>
           )}
@@ -368,8 +405,8 @@ function getDescansoParcial(franja, config) {
   return minDesc
 }
 
-function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, incidencias, label }) {
-  const [franjaSeleccionada, setFranjaSeleccionada] = useState(null)
+function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, incidencias, label, franjaSeleccionada, onSelectFranja }) {
+  const setFranjaSeleccionada = onSelectFranja
   const W = 500, H = 160, PT = 26, PB = 34, PX = 4
   const n = franjas.length
   if (n === 0) return null
