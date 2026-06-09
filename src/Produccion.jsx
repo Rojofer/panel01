@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { collection, doc, getDocs, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
 
+const DESCANSO_VACIO = { hora: '', min: 0, dur: 0 }
+
 export default function Produccion({ turnoId, config, onClose }) {
   const [produccion, setProduccion] = useState({})
   const [editando, setEditando] = useState(null)
@@ -9,21 +11,22 @@ export default function Produccion({ turnoId, config, onClose }) {
   const [chica, setChica] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // ingresos por sala
+  // ingresos
   const [primerIngresoGrande, setPrimerIngresoGrande] = useState('')
   const [primerIngresoChica,  setPrimerIngresoChica]  = useState('')
   const [ultimoIngresoGrande, setUltimoIngresoGrande] = useState('')
   const [ultimoIngresoChica,  setUltimoIngresoChica]  = useState('')
 
-  // descansos por sala
-  const [descGrandeHora, setDescGrandeHora] = useState('')
-  const [descGrandeMin,  setDescGrandeMin]  = useState('')
-  const [descGrandeDur,  setDescGrandeDur]  = useState('')
-  const [descChicaHora,  setDescChicaHora]  = useState('')
-  const [descChicaMin,   setDescChicaMin]   = useState('')
-  const [descChicaDur,   setDescChicaDur]   = useState('')
+  // descansos: array de {hora, min, dur} por sala
+  const [descansosGrande, setDescansosGrande] = useState([{...DESCANSO_VACIO}, {...DESCANSO_VACIO}])
+  const [descansosChica,  setDescansosChica]  = useState([{...DESCANSO_VACIO}, {...DESCANSO_VACIO}])
 
-  const franjas      = config ? generarFranjas(config) : []
+  // colapsables
+  const [openPrimer,   setOpenPrimer]   = useState(false)
+  const [openUltimo,   setOpenUltimo]   = useState(false)
+  const [openDescanso, setOpenDescanso] = useState(false)
+
+  const franjas       = config ? generarFranjas(config) : []
   const primeraFranja = franjas[0]
   const ultimaFranja  = franjas[franjas.length - 1]
   const objG = config?.objetivoGrande || 350
@@ -43,19 +46,32 @@ export default function Produccion({ turnoId, config, onClose }) {
       if (d.primerIngresoChica)  setPrimerIngresoChica(d.primerIngresoChica)
       if (d.ultimoIngresoGrande) setUltimoIngresoGrande(d.ultimoIngresoGrande)
       if (d.ultimoIngresoChica)  setUltimoIngresoChica(d.ultimoIngresoChica)
-      // descansos por sala — si no están en el turno, tomar del config global
-      setDescGrandeHora(d.descansoGrandeHora ?? config?.descanso1Hora ?? '')
-      setDescGrandeMin (d.descansoGrandeMin  ?? config?.descanso1Min  ?? 0)
-      setDescGrandeDur (d.descansoGrandeDur  ?? config?.descanso1Dur  ?? '')
-      setDescChicaHora (d.descansoChicaHora  ?? config?.descanso2Hora ?? '')
-      setDescChicaMin  (d.descansoChicaMin   ?? config?.descanso2Min  ?? 0)
-      setDescChicaDur  (d.descansoChicaDur   ?? config?.descanso2Dur  ?? '')
+      if (d.descansosGrande) setDescansosGrande(d.descansosGrande)
+      if (d.descansosChica)  setDescansosChica(d.descansosChica)
     })
   }, [turnoId])
 
   async function guardarCampo(campo, valor) {
-    if (valor === '' || valor === undefined) return
-    await updateDoc(doc(db,'turnos',turnoId), { [campo]: typeof valor === 'string' ? valor : Number(valor) })
+    await updateDoc(doc(db,'turnos',turnoId), { [campo]: valor })
+  }
+
+  async function guardarDescansos() {
+    await updateDoc(doc(db,'turnos',turnoId), { descansosGrande, descansosChica })
+  }
+
+  function updateDescanso(sala, idx, field, value) {
+    const setter = sala === 'grande' ? setDescansosGrande : setDescansosChica
+    setter(prev => prev.map((d, i) => i === idx ? { ...d, [field]: value } : d))
+  }
+
+  function addDescanso(sala) {
+    const setter = sala === 'grande' ? setDescansosGrande : setDescansosChica
+    setter(prev => [...prev, {...DESCANSO_VACIO}])
+  }
+
+  function removeDescanso(sala, idx) {
+    const setter = sala === 'grande' ? setDescansosGrande : setDescansosChica
+    setter(prev => prev.filter((_, i) => i !== idx))
   }
 
   function abrirEditar(franja) {
@@ -80,139 +96,143 @@ export default function Produccion({ turnoId, config, onClose }) {
     setSaving(false)
   }
 
-  const totalGrande = Object.values(produccion).reduce((a,p) => a + (p.grande || 0), 0)
-  const totalChica  = Object.values(produccion).reduce((a,p) => a + (p.chica  || 0), 0)
-  const objTotalG   = objG * franjas.length
-  const objTotalC   = objC * franjas.length
-
-  const lbl = t => <div style={{ fontSize:'10px', color:'#aaa', fontWeight:'600', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'5px' }}>{t}</div>
-  const inputTime = (val, setVal, campo) => (
+  // ── estilos ──
+  const inputTime = (val, onChange, onBlurSave) => (
     <input type="time" value={val}
-      onChange={e => setVal(e.target.value)}
-      onBlur={() => guardarCampo(campo, val)}
-      style={{ width:'100%', fontSize:'13px', fontWeight:'600', borderRadius:'8px', border:'1.5px solid #e8e8e8', padding:'6px 8px', background:'#fff', boxSizing:'border-box' }} />
+      onChange={e => onChange(e.target.value)}
+      onBlur={onBlurSave}
+      style={{ width:'100%', fontSize:'14px', fontWeight:'600', borderRadius:'8px', border:'1.5px solid #e8e8e8', padding:'6px 8px', background:'#fff', boxSizing:'border-box' }} />
   )
-  const inputNum = (val, setVal, campo, ph) => (
+  const inputNum = (val, onChange, onBlurSave, ph) => (
     <input type="number" value={val} placeholder={ph}
-      onChange={e => setVal(e.target.value)}
-      onBlur={() => guardarCampo(campo, val)}
-      style={{ width:'100%', fontSize:'13px', fontWeight:'600', borderRadius:'8px', border:'1.5px solid #e8e8e8', padding:'6px 8px', background:'#fff', boxSizing:'border-box', textAlign:'center' }} />
+      onChange={e => onChange(e.target.value)}
+      onBlur={onBlurSave}
+      style={{ width:'100%', fontSize:'13px', borderRadius:'8px', border:'1.5px solid #e8e8e8', padding:'6px 8px', background:'#fff', boxSizing:'border-box', textAlign:'center' }} />
   )
+  const lbl = t => <div style={{ fontSize:'9px', color:'#bbb', fontWeight:'600', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:'4px' }}>{t}</div>
 
-  const sectionTitle = t => (
-    <div style={{ fontSize:'11px', fontWeight:'700', color:'#555', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:'10px' }}>{t}</div>
-  )
+  function SectionHeader({ title, open, setOpen, summary }) {
+    return (
+      <div onClick={() => setOpen(!open)}
+        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', userSelect:'none', padding:'10px 14px', background: open ? '#F0F6FF' : '#F7F7F5', borderRadius: open ? '10px 10px 0 0' : '10px', border:`1px solid ${open ? '#C8DCF5' : '#EFEFED'}`, transition:'background .15s' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+          <span style={{ fontSize:'11px', fontWeight:'700', color: open ? '#185FA5' : '#555', textTransform:'uppercase', letterSpacing:'.07em' }}>{title}</span>
+          {!open && summary && <span style={{ fontSize:'10px', color:'#185FA5', fontWeight:'600' }}>{summary}</span>}
+        </div>
+        <span style={{ fontSize:'9px', color:'#aaa', transform: open ? 'rotate(180deg)' : 'none', display:'inline-block', transition:'transform .2s' }}>▼</span>
+      </div>
+    )
+  }
+
+  // resumen para mostrar en collapsed
+  const resumenPrimer = [primerIngresoGrande && `G:${primerIngresoGrande}`, primerIngresoChica && `Ch:${primerIngresoChica}`].filter(Boolean).join(' · ')
+  const resumenUltimo = [ultimoIngresoGrande && `G:${ultimoIngresoGrande}`, ultimoIngresoChica && `Ch:${ultimoIngresoChica}`].filter(Boolean).join(' · ')
+  const resumenDesc = descansosGrande.filter(d => d.hora !== '').length + descansosChica.filter(d => d.hora !== '').length
+  const resumenDescStr = resumenDesc > 0 ? `${resumenDesc} configurado${resumenDesc > 1 ? 's' : ''}` : null
+
+  const innerStyle = { border:'1px solid #C8DCF5', borderTop:'none', borderRadius:'0 0 10px 10px', padding:'12px 14px', background:'#fff', marginBottom:'10px' }
 
   return (
     <>
       <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.25)', zIndex:10, backdropFilter:'blur(2px)' }} />
-      <div style={{ fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', position:'fixed', top:0, right:0, bottom:0, width:'440px', background:'#fff', borderLeft:'1px solid #f0f0f0', zIndex:11, display:'flex', flexDirection:'column', boxShadow:'-8px 0 32px rgba(0,0,0,0.1)' }}>
+      <div style={{ fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', position:'fixed', top:0, right:0, bottom:0, width:'420px', background:'#fff', borderLeft:'1px solid #f0f0f0', zIndex:11, display:'flex', flexDirection:'column', boxShadow:'-8px 0 32px rgba(0,0,0,0.1)' }}>
 
         {/* header */}
-        <div style={{ padding:'20px 24px 16px', borderBottom:'1px solid #f0f0f0', flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
+        <div style={{ padding:'18px 20px 14px', borderBottom:'1px solid #f0f0f0', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <div style={{ fontSize:'18px', fontWeight:'700', color:'#111' }}>Producción</div>
             <button onClick={onClose} style={{ width:'32px', height:'32px', borderRadius:'8px', border:'1.5px solid #e8e8e8', background:'#fafafa', cursor:'pointer', fontSize:'18px', color:'#888', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
           </div>
-
-          {/* primer ingreso */}
-          <div style={{ background:'#F7F7F5', borderRadius:'12px', padding:'12px 14px', marginBottom:'10px' }}>
-            {sectionTitle('Primer ingreso')}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
-              <div>{lbl('Sala grande')}{inputTime(primerIngresoGrande, setPrimerIngresoGrande, 'primerIngresoGrande')}</div>
-              <div>{lbl('Sala chica')}{inputTime(primerIngresoChica, setPrimerIngresoChica, 'primerIngresoChica')}</div>
-            </div>
-          </div>
-
-          {/* último ingreso */}
-          <div style={{ background:'#F7F7F5', borderRadius:'12px', padding:'12px 14px', marginBottom:'10px' }}>
-            {sectionTitle('Último ingreso')}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
-              <div>{lbl('Sala grande')}{inputTime(ultimoIngresoGrande, setUltimoIngresoGrande, 'ultimoIngresoGrande')}</div>
-              <div>{lbl('Sala chica')}{inputTime(ultimoIngresoChica, setUltimoIngresoChica, 'ultimoIngresoChica')}</div>
-            </div>
-          </div>
-
-          {/* descansos por sala */}
-          <div style={{ background:'#F7F7F5', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
-            {sectionTitle('Descansos')}
-            {[
-              { label:'Sala grande', hora: descGrandeHora, setHora: setDescGrandeHora, campoH:'descansoGrandeHora',
-                min: descGrandeMin, setMin: setDescGrandeMin, campoM:'descansoGrandeMin',
-                dur: descGrandeDur, setDur: setDescGrandeDur, campoD:'descansoGrandeDur' },
-              { label:'Sala chica',  hora: descChicaHora,  setHora: setDescChicaHora,  campoH:'descansoChicaHora',
-                min: descChicaMin,  setMin: setDescChicaMin,  campoM:'descansoChicaMin',
-                dur: descChicaDur,  setDur: setDescChicaDur,  campoD:'descansoChicaDur' },
-            ].map(({ label, hora, setHora, campoH, min, setMin, campoM, dur, setDur, campoD }) => (
-              <div key={label} style={{ marginBottom:'10px' }}>
-                <div style={{ fontSize:'11px', fontWeight:'600', color:'#888', marginBottom:'6px' }}>{label}</div>
-                <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 2fr', gap:'6px' }}>
-                  <div>
-                    {lbl('Hora')}
-                    <input type="number" value={hora} placeholder="7"
-                      onChange={e => setHora(e.target.value)}
-                      onBlur={() => guardarCampo(campoH, hora)}
-                      style={{ width:'100%', fontSize:'13px', borderRadius:'8px', border:'1.5px solid #e8e8e8', padding:'6px 8px', boxSizing:'border-box', textAlign:'center' }} />
-                  </div>
-                  <div>
-                    {lbl('Min')}
-                    <input type="number" value={min} placeholder="30"
-                      onChange={e => setMin(e.target.value)}
-                      onBlur={() => guardarCampo(campoM, min)}
-                      style={{ width:'100%', fontSize:'13px', borderRadius:'8px', border:'1.5px solid #e8e8e8', padding:'6px 8px', boxSizing:'border-box', textAlign:'center' }} />
-                  </div>
-                  <div>
-                    {lbl('Duración (min)')}
-                    <input type="number" value={dur} placeholder="30"
-                      onChange={e => setDur(e.target.value)}
-                      onBlur={() => guardarCampo(campoD, dur)}
-                      style={{ width:'100%', fontSize:'13px', borderRadius:'8px', border:'1.5px solid #e8e8e8', padding:'6px 8px', boxSizing:'border-box', textAlign:'center' }} />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* totales */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
-            {[['Sala grande', totalGrande, objTotalG], ['Sala chica', totalChica, objTotalC]].map(([label, total, obj]) => (
-              <div key={label} style={{ background:'#F7F7F5', borderRadius:'10px', padding:'10px 12px' }}>
-                <div style={{ fontSize:'11px', color:'#aaa', marginBottom:'3px' }}>{label}</div>
-                <div style={{ fontSize:'20px', fontWeight:'700', color: total >= obj ? '#1D9E75' : '#E24B4A', lineHeight:1 }}>{total}</div>
-                <div style={{ fontSize:'10px', color:'#aaa', marginTop:'2px' }}>obj {obj}</div>
-              </div>
-            ))}
-          </div>
         </div>
 
-        {/* lista de franjas */}
-        <div style={{ flex:1, overflowY:'auto', padding:'16px 24px' }}>
+        <div style={{ flex:1, overflowY:'auto', padding:'14px 20px' }}>
+
+          {/* ── Primer ingreso ── */}
+          <div style={{ marginBottom: openPrimer ? 0 : '10px' }}>
+            <SectionHeader title="Primer ingreso" open={openPrimer} setOpen={setOpenPrimer} summary={resumenPrimer} />
+            {openPrimer && (
+              <div style={innerStyle}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                  <div>{lbl('Sala grande')}{inputTime(primerIngresoGrande, setPrimerIngresoGrande, () => guardarCampo('primerIngresoGrande', primerIngresoGrande))}</div>
+                  <div>{lbl('Sala chica')}{inputTime(primerIngresoChica, setPrimerIngresoChica, () => guardarCampo('primerIngresoChica', primerIngresoChica))}</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Último ingreso ── */}
+          <div style={{ marginBottom: openUltimo ? 0 : '10px' }}>
+            <SectionHeader title="Último ingreso" open={openUltimo} setOpen={setOpenUltimo} summary={resumenUltimo} />
+            {openUltimo && (
+              <div style={innerStyle}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                  <div>{lbl('Sala grande')}{inputTime(ultimoIngresoGrande, setUltimoIngresoGrande, () => guardarCampo('ultimoIngresoGrande', ultimoIngresoGrande))}</div>
+                  <div>{lbl('Sala chica')}{inputTime(ultimoIngresoChica, setUltimoIngresoChica, () => guardarCampo('ultimoIngresoChica', ultimoIngresoChica))}</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Descansos ── */}
+          <div style={{ marginBottom: openDescanso ? 0 : '16px' }}>
+            <SectionHeader title="Descansos" open={openDescanso} setOpen={setOpenDescanso} summary={resumenDescStr} />
+            {openDescanso && (
+              <div style={innerStyle}>
+                {[
+                  { label: 'Sala grande', descansos: descansosGrande, sala: 'grande' },
+                  { label: 'Sala chica',  descansos: descansosChica,  sala: 'chica'  },
+                ].map(({ label, descansos, sala }) => (
+                  <div key={sala} style={{ marginBottom:'14px' }}>
+                    <div style={{ fontSize:'11px', fontWeight:'700', color:'#555', marginBottom:'8px' }}>{label}</div>
+                    {descansos.map((d, idx) => (
+                      <div key={idx} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 2fr auto', gap:'6px', alignItems:'flex-end', marginBottom:'6px' }}>
+                        <div>{lbl(idx === 0 ? 'Hora inicio' : ' ')}{inputNum(d.hora, v => updateDescanso(sala, idx, 'hora', v), guardarDescansos, 'ej: 7')}</div>
+                        <div>{lbl(idx === 0 ? 'Min' : ' ')}{inputNum(d.min, v => updateDescanso(sala, idx, 'min', v), guardarDescansos, '0')}</div>
+                        <div>{lbl(idx === 0 ? 'Duración (min)' : ' ')}{inputNum(d.dur, v => updateDescanso(sala, idx, 'dur', v), guardarDescansos, 'min')}</div>
+                        <button onClick={() => { removeDescanso(sala, idx); setTimeout(guardarDescansos, 0) }}
+                          style={{ width:'28px', height:'32px', borderRadius:'7px', border:'1px solid #fde8e8', background:'#fef9f9', cursor:'pointer', color:'#E24B4A', fontSize:'14px', flexShrink:0, marginBottom:'1px' }}>×</button>
+                      </div>
+                    ))}
+                    <button onClick={() => addDescanso(sala)}
+                      style={{ fontSize:'11px', padding:'5px 12px', borderRadius:'8px', border:'1.5px dashed #b5d4f4', background:'#f0f6ff', color:'#185FA5', cursor:'pointer', fontWeight:'500', width:'100%' }}>
+                      + Agregar descanso
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Separador ── */}
+          <div style={{ fontSize:'10px', fontWeight:'700', color:'#bbb', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:'10px' }}>Franjas horarias</div>
+
+          {/* ── Lista de franjas ── */}
           {franjas.map(franja => {
             const prod      = produccion[franja]
             const esEdit    = editando === franja
             const esPrimera = franja === primeraFranja
             const esUltima  = franja === ultimaFranja
             return (
-              <div key={franja} style={{ marginBottom:'8px', background: esEdit ? '#f8fbff' : '#fff', border:`1px solid ${esEdit ? '#185FA5' : '#EFEFED'}`, borderRadius:'12px', padding:'12px 14px' }}>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: esEdit ? '12px' : '0' }}>
+              <div key={franja} style={{ marginBottom:'6px', background: esEdit ? '#f8fbff' : '#fff', border:`1px solid ${esEdit ? '#185FA5' : '#EFEFED'}`, borderRadius:'10px', padding:'10px 12px' }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: esEdit ? '10px' : '0' }}>
                   <div>
                     <span style={{ fontSize:'13px', fontWeight:'600', color:'#333' }}>{franja.replace('-',' — ')}</span>
                     {esPrimera && (primerIngresoGrande || primerIngresoChica) && !esEdit && (
-                      <span style={{ fontSize:'10px', color:'#185FA5', marginLeft:'8px', fontWeight:'600' }}>▶ G:{primerIngresoGrande||'—'} Ch:{primerIngresoChica||'—'}</span>
+                      <span style={{ fontSize:'9px', color:'#185FA5', marginLeft:'8px', fontWeight:'600' }}>▶ G:{primerIngresoGrande||'—'} Ch:{primerIngresoChica||'—'}</span>
                     )}
                     {esUltima && (ultimoIngresoGrande || ultimoIngresoChica) && !esEdit && (
-                      <span style={{ fontSize:'10px', color:'#BA7517', marginLeft:'8px', fontWeight:'600' }}>⏹ G:{ultimoIngresoGrande||'—'} Ch:{ultimoIngresoChica||'—'}</span>
+                      <span style={{ fontSize:'9px', color:'#BA7517', marginLeft:'8px', fontWeight:'600' }}>⏹ G:{ultimoIngresoGrande||'—'} Ch:{ultimoIngresoChica||'—'}</span>
                     )}
                   </div>
                   {!esEdit && (
-                    <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
                       {prod ? (
-                        <div style={{ display:'flex', gap:'10px', fontSize:'12px' }}>
+                        <div style={{ display:'flex', gap:'8px', fontSize:'12px' }}>
                           <span style={{ color: prod.grande >= objG ? '#1D9E75' : '#E24B4A' }}>G: <strong>{prod.grande ?? '—'}</strong></span>
-                          <span style={{ color: prod.chica  >= objC ? '#1D9E75' : '#E24B4A' }}>Ch: <strong>{prod.chica  ?? '—'}</strong></span>
+                          <span style={{ color: prod.chica  >= objC ? '#1D9E75' : '#E24B4A' }}>Ch: <strong>{prod.chica ?? '—'}</strong></span>
                         </div>
                       ) : <span style={{ fontSize:'11px', color:'#ccc' }}>sin datos</span>}
-                      <button onClick={() => abrirEditar(franja)} style={{ fontSize:'11px', padding:'3px 10px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>
+                      <button onClick={() => abrirEditar(franja)} style={{ fontSize:'11px', padding:'3px 9px', borderRadius:'7px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>
                         {prod ? '✏️' : '+'}
                       </button>
                     </div>
@@ -234,7 +254,7 @@ export default function Produccion({ turnoId, config, onClose }) {
                     </div>
                     <div style={{ display:'flex', gap:'6px' }}>
                       <button onClick={() => setEditando(null)} style={{ flex:1, padding:'7px', fontSize:'12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fff', cursor:'pointer', color:'#888' }}>Cancelar</button>
-                      <button onClick={guardar} disabled={saving} style={{ flex:2, padding:'7px', fontSize:'12px', fontWeight:'700', borderRadius:'8px', background:'#185FA5', color:'#fff', border:'none', cursor:'pointer' }}>{saving?'Guardando...':'Guardar'}</button>
+                      <button onClick={guardar} disabled={saving} style={{ flex:2, padding:'7px', fontSize:'12px', fontWeight:'700', borderRadius:'8px', background:'#185FA5', color:'#fff', border:'none', cursor:'pointer' }}>{saving ? 'Guardando...' : 'Guardar'}</button>
                     </div>
                   </div>
                 )}
