@@ -316,6 +316,8 @@ function getDescansoParcial(franja, config, descSala) {
 }
 
 function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, incidencias, label, franjaSeleccionada, onSelectFranja, primerIngreso, ultimoIngreso, descSala }) {
+  const [tooltipFranja, setTooltipFranja] = useState(null)
+  const [tooltipPos,    setTooltipPos]    = useState({ x: 0, y: 0 })
   const AXIS_W = 28  // ancho del eje Y
   const W = 500, H = 175, PT = 20, PB = 36, PX = 4
   const n = franjas.length
@@ -352,7 +354,22 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
   }))
 
   return (
-    <div>
+    <div style={{position:'relative'}}>
+      {/* tooltip líneas */}
+      {tooltipFranja && produccion[tooltipFranja]?.lineas && sala === 'grande' && (
+        <div style={{position:'absolute',left:tooltipPos.x,top:tooltipPos.y,zIndex:10,background:'#111',color:'#fff',borderRadius:'8px',padding:'8px 12px',fontSize:'11px',pointerEvents:'none',minWidth:'100px',boxShadow:'0 4px 12px rgba(0,0,0,0.25)',transform:'translateX(-50%) translateY(-110%)'}}>
+          {Object.entries(produccion[tooltipFranja].lineas).filter(([,v])=>v!=null).map(([l,v])=>(
+            <div key={l} style={{display:'flex',justifyContent:'space-between',gap:'12px',marginBottom:'2px'}}>
+              <span style={{color:'#aaa',fontWeight:'600'}}>{l}</span>
+              <span style={{fontWeight:'700'}}>{v}</span>
+            </div>
+          ))}
+          <div style={{borderTop:'1px solid #333',marginTop:'4px',paddingTop:'4px',display:'flex',justifyContent:'space-between',gap:'12px'}}>
+            <span style={{color:'#aaa',fontWeight:'600'}}>Total</span>
+            <span style={{fontWeight:'800',color:'#fff'}}>{produccion[tooltipFranja].grande}</span>
+          </div>
+        </div>
+      )}
       <div style={{display:'flex',alignItems:'baseline',gap:'12px',marginBottom:'6px'}}>
         <span style={{fontSize:'11px',fontWeight:'700',color:'#888',textTransform:'uppercase',letterSpacing:'.07em'}}>{label}</span>
         <span style={{fontSize:'20px',fontWeight:'800',color:'#111',letterSpacing:'-0.5px'}}>{totalProd.toLocaleString('es-AR')}</span>
@@ -405,7 +422,9 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
           const delta = objF != null ? val - objF : null
           const overlayH = Math.round(bH * (mDesc / 60))
           return (
-            <g key={franja} onClick={()=>onSelectFranja&&onSelectFranja(franja)} style={{cursor:'pointer'}}>
+            <g key={franja} onClick={()=>onSelectFranja&&onSelectFranja(franja)} style={{cursor:'pointer'}}
+              onMouseEnter={() => { if(sala==='grande' && produccion[franja]?.lineas){ setTooltipFranja(franja); setTooltipPos({x:`${Math.round((xc/W)*100)}%`, y: PT+chartH-bH-10}) } }}
+              onMouseLeave={()=>setTooltipFranja(null)}>
               {bgEl}{lineEl}
               <rect x={x+1} y={yZero-bH} width={barW} height={bH} fill={color} rx="3" opacity={sel?1:.85}/>
               {sel && <rect x={x+1} y={yZero-bH} width={barW} height={bH} fill="none" stroke={color} strokeWidth="2" rx="3"/>}
