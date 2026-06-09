@@ -200,7 +200,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
                 const pct2 = objTotal2>0?Math.round(total2/objTotal2*100):0
                 const delta2 = total2-objTotal2
                 return total2>0?(
-                  <div style={{display:'flex',flexDirection:'column',justifyContent:'center',height:'100%'}}>
+                  <div style={{display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',height:'100%',textAlign:'center'}}>
                     <span style={{fontSize:'32px',fontWeight:'800',color:'#111',letterSpacing:'-1px',lineHeight:1,marginBottom:'6px'}}>{total2.toLocaleString('es-AR')}</span>
                     <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                       <span style={{fontSize:'15px',fontWeight:'800',color:pct2>=100?'#1D9E75':'#E24B4A'}}>{pct2}%</span>
