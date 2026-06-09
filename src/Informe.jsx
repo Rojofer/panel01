@@ -25,101 +25,87 @@ function minutos(horaInicio, horaFin) {
   return Math.max(0, (h2*60+m2) - (h1*60+m1))
 }
 
-function esDescanso(franja, config) {
-  if (!config) return false
+function getDescansoParcialInf(franja, config) {
+  if (!config) return 0
   const hFranja = parseInt(franja.split(':')[0])
-  const d1h = config.descanso1Hora, d1m = config.descanso1Min || 0
-  const d2h = config.descanso2Hora, d2m = config.descanso2Min || 0
-  if (d1h !== undefined && hFranja === d1h) return true
-  if (d2h !== undefined && hFranja === d2h) return true
-  return false
+  let minDesc = 0
+  for (const d of [
+    { hora: config.descanso1Hora, min: config.descanso1Min || 0, dur: config.descanso1Dur || 0 },
+    { hora: config.descanso2Hora, min: config.descanso2Min || 0, dur: config.descanso2Dur || 0 },
+  ]) {
+    if (d.hora === undefined || d.dur === 0) continue
+    const dIni = d.hora * 60 + d.min
+    const dFin = dIni + d.dur
+    const fIni = hFranja * 60
+    const fFin = fIni + 60
+    minDesc += Math.max(0, Math.min(dFin, fFin) - Math.max(dIni, fIni))
+  }
+  return minDesc
 }
 
 function formatFranja(franja) {
   return franja.split('-')[0].replace(':00','').replace(/^0/,'')
 }
 
-// ─── gráfico SVG hora a hora ─────────────────────────────────────────────────
-
 function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala }) {
-  const W = 480, H = 130, PADDING_TOP = 28, PADDING_BOT = 36, PADDING_X = 10
-  const nFranjas = franjas.length
-  if (nFranjas === 0) return null
+  const W = 480, H = 150, PT = 26, PB = 36, PX = 6
+  const n = franjas.length
+  if (n === 0) return null
+  const slot = (W - PX * 2) / n
+  const barW = Math.max(10, Math.floor(slot) - 4)
+  const chartH = H - PT - PB
 
-  const barW = Math.floor((W - PADDING_X * 2) / nFranjas) - 3
-  const maxVal = Math.max(objetivo * 1.4, ...franjas.map(f => produccion[f]?.[sala] || 0))
-  const chartH = H - PADDING_TOP - PADDING_BOT
-
-  function yBar(val) {
-    return PADDING_TOP + chartH - Math.round((val / maxVal) * chartH)
+  function objFranja(franja) {
+    const mDesc = getDescansoParcialInf(franja, config)
+    return Math.round(objetivo * (60 - mDesc) / 60)
   }
-  const yObj = yBar(objetivo)
+
+  const vals = franjas.map(f => produccion[f]?.[sala]).filter(v => v != null)
+  const maxVal = Math.max(...franjas.map(f => objFranja(f)) , ...vals, 1) * 1.35
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width:'100%', height:'auto', display:'block' }}>
-      {/* línea punteada objetivo */}
-      <line x1={PADDING_X} y1={yObj} x2={W - PADDING_X} y2={yObj}
-        stroke="#C8B89A" strokeWidth="1.2" strokeDasharray="4 3" />
-
       {franjas.map((franja, i) => {
-        const x = PADDING_X + i * ((W - PADDING_X*2) / nFranjas)
-        const xCenter = x + barW / 2
-        const desc = esDescanso(franja, config)
+        const x = PX + i * slot
+        const xc = x + slot / 2
+        const mDesc = getDescansoParcialInf(franja, config)
+        const objF = objFranja(franja)
+        const yObj = PT + chartH - Math.round((objF / maxVal) * chartH)
         const val = produccion[franja]?.[sala]
-        const tieneVal = val !== null && val !== undefined
+        const hora = formatFranja(franja)
 
-        if (desc) {
-          // barra de descanso
-          const barH = chartH * 0.3
+        const lineEl = (
+          <line key={`obj-${franja}`} x1={x+1} y1={yObj} x2={x+barW+1} y2={yObj}
+            stroke="#C8B89A" strokeWidth="1.2" strokeDasharray="3 2" />
+        )
+
+        if (val == null) {
           return (
             <g key={franja}>
-              <rect x={x+1} y={PADDING_TOP + chartH - barH} width={barW} height={barH}
-                fill="#DEDED8" rx="3" opacity="0.7" />
-              <text x={xCenter} y={H - PADDING_BOT + 14} textAnchor="middle"
-                fontSize="9" fill="#BCBCB0" fontFamily="system-ui">
-                {formatFranja(franja)}
-              </text>
-              <text x={xCenter} y={H - PADDING_BOT + 24} textAnchor="middle"
-                fontSize="8" fill="#BCBCB0" fontFamily="system-ui">desc.</text>
+              {lineEl}
+              <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="9" fill="#CCC" fontFamily="system-ui">{hora}</text>
+              <text x={xc} y={PT-5} textAnchor="middle" fontSize="9" fill="#DDD" fontFamily="system-ui">—</text>
             </g>
           )
         }
 
-        if (!tieneVal) {
-          return (
-            <g key={franja}>
-              <text x={xCenter} y={H - PADDING_BOT + 14} textAnchor="middle"
-                fontSize="9" fill="#D0D0CC" fontFamily="system-ui">
-                {formatFranja(franja)}
-              </text>
-              <text x={xCenter} y={PADDING_TOP - 6} textAnchor="middle"
-                fontSize="9" fill="#D0D0CC" fontFamily="system-ui">—</text>
-            </g>
-          )
-        }
-
-        const sobreObj = val >= objetivo
-        const color = sobreObj ? '#1D9E75' : '#E24B4A'
-        const barH = Math.max(4, Math.round((val / maxVal) * chartH))
-        const delta = val - objetivo
-        const deltaStr = delta >= 0 ? `+${delta}` : `${delta}`
+        const sobre = val >= objF
+        const color = sobre ? '#1D9E75' : '#E24B4A'
+        const bH = Math.max(6, Math.round((val / maxVal) * chartH))
+        const delta = val - objF
+        const overlayH = Math.round(bH * (mDesc / 60))
 
         return (
           <g key={franja}>
-            <rect x={x+1} y={PADDING_TOP + chartH - barH} width={barW} height={barH}
-              fill={color} rx="3" opacity="0.85" />
-            {/* número arriba */}
-            <text x={xCenter} y={PADDING_TOP + chartH - barH - 5} textAnchor="middle"
-              fontSize="9" fill={color} fontWeight="600" fontFamily="system-ui">{val}</text>
-            {/* hora abajo */}
-            <text x={xCenter} y={H - PADDING_BOT + 14} textAnchor="middle"
-              fontSize="9" fill="#888" fontFamily="system-ui">
-              {formatFranja(franja)}
-            </text>
-            {/* delta */}
-            <text x={xCenter} y={H - PADDING_BOT + 24} textAnchor="middle"
-              fontSize="8" fill={sobreObj ? '#1D9E75' : '#E24B4A'} fontWeight="600" fontFamily="system-ui">
-              {deltaStr}
+            {lineEl}
+            <rect x={x+1} y={PT+chartH-bH} width={barW} height={bH} fill={color} rx="3" opacity=".88" />
+            {mDesc > 0 && overlayH > 0 && (
+              <rect x={x+1} y={PT+chartH-bH} width={barW} height={overlayH} fill="#B8B8B0" rx="3" opacity=".7" />
+            )}
+            <text x={xc} y={PT+chartH-bH-5} textAnchor="middle" fontSize="9" fill={color} fontWeight="600" fontFamily="system-ui">{val}</text>
+            <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="9" fill="#888" fontFamily="system-ui">{hora}</text>
+            <text x={xc} y={H-PB+24} textAnchor="middle" fontSize="8" fill={sobre?'#1D9E75':'#E24B4A'} fontWeight="600" fontFamily="system-ui">
+              {delta >= 0 ? `+${delta}` : delta}
             </text>
           </g>
         )
@@ -127,6 +113,7 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala }) {
     </svg>
   )
 }
+
 
 // ─── componente principal ────────────────────────────────────────────────────
 
@@ -176,7 +163,7 @@ export default function Informe({ onVolver }) {
 
   const cfg = turnoData || configTurno
   const franjas = cfg ? generarFranjas(cfg) : []
-  const franjasActivas = franjas.filter(f => !esDescanso(f, cfg))
+  const franjasActivas = franjas.filter(f => getDescansoParcialInf(f, cfg) < 60)
 
   const objG = cfg?.objetivoGrande || 350
   const objC = cfg?.objetivoChica  || 100
@@ -200,16 +187,15 @@ export default function Informe({ onVolver }) {
   const incsChica  = incsPorSala('chica')
 
   function tiempoPerdidoSala(incs) {
-    return incs.filter(i => i.grado !== 'informativo').reduce((a,i) => a + minutos(i.horaInicio, i.horaFin), 0)
+    return incs.reduce((a,i) => a + minutos(i.horaInicio, i.horaFin), 0)
   }
 
   const tiempoGrande = tiempoPerdidoSala(incsGrande)
   const tiempoChica  = tiempoPerdidoSala(incsChica)
-  const tiempoTotal  = incidencias.reduce((a,i) => i.grado === 'informativo' ? a : a + minutos(i.horaInicio, i.horaFin), 0)
+  const tiempoTotal  = incidencias.reduce((a,i) => a + minutos(i.horaInicio, i.horaFin), 0)
 
   // tiempo por categoría (todas las incidencias)
   const tiempoPorCat = incidencias.reduce((acc,i) => {
-    if (i.grado === 'informativo') return acc
     if (i.categoriaNombre) {
       acc[i.categoriaNombre] = (acc[i.categoriaNombre] || 0) + minutos(i.horaInicio, i.horaFin)
     }
