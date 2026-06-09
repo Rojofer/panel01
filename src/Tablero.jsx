@@ -386,7 +386,7 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
         <span style={{fontSize:'11px',color:'#bbb'}}>de {objTotal.toLocaleString('es-AR')}</span>
         <span style={{fontSize:'13px',fontWeight:'700',color:pct>=100?'#1D9E75':'#E24B4A'}}>{pct}%</span>
         <span style={{fontSize:'11px',fontWeight:'600',color:pct>=100?'#1D9E75':'#E24B4A'}}>{deltaTotal>=0?'+':''}{deltaTotal.toLocaleString('es-AR')}</span>
-        {descLabel && <span style={{marginLeft:'auto',fontSize:'10px',fontWeight:'600',color:'#B0B0A8',display:'flex',alignItems:'center',gap:'3px'}}><span style={{width:'8px',height:'8px',borderRadius:'2px',background:'#B0B0A8',display:'inline-block',opacity:.75}}/>☕ {descLabel} desc.</span>}
+        {descLabel && <span style={{marginLeft:'auto',fontSize:'10px',fontWeight:'600',color:'#B0B0A8',display:'flex',alignItems:'center',gap:'3px'}}><span style={{width:'8px',height:'8px',borderRadius:'2px',background:'#B0B0A8',display:'inline-block',opacity:.75}}/> {descLabel} desc.</span>}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}}>
         {/* eje Y + grid */}
