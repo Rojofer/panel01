@@ -32,14 +32,10 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [graficosExpandido, setGraficosExpandido] = useState(false)
   const [incidenciasExpandido, setIncidenciasExpandido] = useState(true)
   const [franjaGrafico, setFranjaGrafico] = useState(null)
-  const [primerIngreso, setPrimerIngreso] = useState('')
-  const [ultimoIngreso, setUltimoIngreso] = useState('')
-  const [produccion, setProduccion] = useState({})
-  const [graficosExpandido, setGraficosExpandido] = useState(false)
-  const [incidenciasExpandido, setIncidenciasExpandido] = useState(true)
-  const [franjaGrafico, setFranjaGrafico] = useState(null)
-  const [primerIngreso, setPrimerIngreso] = useState('')
-  const [ultimoIngreso, setUltimoIngreso] = useState('')
+  const [primerIngresoGrande, setPrimerIngresoGrande] = useState('')
+  const [primerIngresoChica, setPrimerIngresoChica] = useState('')
+  const [ultimoIngresoGrande, setUltimoIngresoGrande] = useState('')
+  const [ultimoIngresoChica, setUltimoIngresoChica] = useState('')
 
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
@@ -151,14 +147,9 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const fechaDisplay = (() => { const d = new Date(); return d.toLocaleDateString('es-AR', { weekday: 'long' }).toUpperCase() + ' ' + String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') })()
   const objG = config?.objetivoGrande || 350
   const objC = config?.objetivoChica  || 100
-  const semana = (() => { const d = new Date(); const s = new Date(d.getFullYear(), 0, 1); return Math.ceil(((d - s) / 86400000 + s.getDay() + 1) / 7) })()
-  const objG = config?.objetivoGrande || 350
-  const objC = config?.objetivoChica  || 100
 
   return (
     <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', background: '#F4F4F1', minHeight: '100vh' }}>
-
-      {/* HEADER */}
       <div style={{ background: '#fff', borderBottom: '1px solid #E8E8E5', padding: '0 20px', height: '54px', display: 'flex', alignItems: 'center', gap: '12px', position: 'sticky', top: 0, zIndex: 5, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', color: '#fff', borderRadius: '7px', padding: '3px 7px', lineHeight: 1 }}>
@@ -191,11 +182,8 @@ export default function Tablero({ user, userData, onVerInforme }) {
         </div>
       </div>
 
-      {/* BODY */}
       <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 260px' : '1fr', minHeight: 'calc(100vh - 54px)' }}>
         <div style={{ borderRight: sectoresConInc.length > 0 ? '1px solid #E8E8E5' : 'none' }}>
-
-          {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1px', background: '#E8E8E5', borderBottom: '1px solid #E8E8E5' }}>
             <div style={{ background: '#fff', padding: '14px 18px' }}>
               <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Incidencias del turno</div>
@@ -250,7 +238,6 @@ export default function Tablero({ user, userData, onVerInforme }) {
             </div>
           </div>
 
-          {/* iniciar turno */}
           {!turnoExiste && (
             <div onClick={() => setModalIniciarTurno(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', borderBottom: '1px solid #E8E8E5', padding: '14px', cursor: 'pointer' }}
               onMouseEnter={e => e.currentTarget.style.background='#edfbf4'}
@@ -260,7 +247,6 @@ export default function Tablero({ user, userData, onVerInforme }) {
             </div>
           )}
 
-          {/* gráficos */}
           {turnoExiste && (
             <div style={{ borderBottom: '1px solid #E8E8E5' }}>
               <div onClick={() => setGraficosExpandido(!graficosExpandido)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', cursor: 'pointer', background: '#fff', userSelect: 'none' }}
@@ -272,7 +258,10 @@ export default function Tablero({ user, userData, onVerInforme }) {
               {graficosExpandido && (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#fff', padding: '0 0 12px 0' }}>
-                    {[{ label: 'Sala grande', sala: 'grande', obj: objG }, { label: 'Sala chica', sala: 'chica', obj: objC }].map(({ label, sala, obj }) => (
+                    {[
+                      { label: 'Sala grande', sala: 'grande', obj: objG, primerIngreso: primerIngresoGrande, ultimoIngreso: ultimoIngresoGrande },
+                      { label: 'Sala chica',  sala: 'chica',  obj: objC, primerIngreso: primerIngresoChica,  ultimoIngreso: ultimoIngresoChica  },
+                    ].map(({ label, sala, obj, primerIngreso, ultimoIngreso }) => (
                       <div key={sala} style={{ padding: '10px 16px' }}>
                         <GraficoHoraAHora
                           franjas={config ? generarFranjas(config) : []}
@@ -296,7 +285,6 @@ export default function Tablero({ user, userData, onVerInforme }) {
             </div>
           )}
 
-          {/* incidencias */}
           <div>
             <div onClick={() => setIncidenciasExpandido(!incidenciasExpandido)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', cursor: 'pointer', background: '#fff', borderBottom: '1px solid #E8E8E5', userSelect: 'none' }}
               onMouseEnter={e => e.currentTarget.style.background='#FAFAF8'}
@@ -327,7 +315,6 @@ export default function Tablero({ user, userData, onVerInforme }) {
           </div>
         </div>
 
-        {/* sectores */}
         {sectoresConInc.length > 0 && (
           <div style={{ padding: '16px 14px' }}>
             <div style={{ fontSize: '9px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '10px' }}>Sectores · click filtra · doble click detalle</div>
@@ -407,8 +394,8 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
   const maxVal = Math.max(...franjas.map(f => objFranja(f)).filter(v => v != null), ...vals, 1) * 1.35
 
   const totalProd = Object.values(produccion).reduce((a, p) => a + (p[sala] || 0), 0)
-  const franjasActivas = franjas.filter(f => getDescansoParcial(f, config) < 60 && objFranja(f) != null)
-  const objTotal = objetivo * franjasActivas.length
+  const franjasConObj = franjas.filter(f => getDescansoParcial(f, config) < 60 && objFranja(f) != null)
+  const objTotal = objetivo * franjasConObj.length
   const pct = objTotal > 0 ? Math.round(totalProd / objTotal * 100) : 0
   const deltaTotal = totalProd - objTotal
 
