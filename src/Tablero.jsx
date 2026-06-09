@@ -10,110 +10,6 @@ const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', i
 const gradoBg = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
 const gradoLabel = { critico: 'Crítica', moderado: 'Moderada', leve: 'Leve', informativo: 'Info' }
 
-// ─── helpers gráfico ────────────────────────────────────────────────────────
-
-function getDescansoParcial(franja, config) {
-  // Devuelve minutos de descanso que caen dentro de esta franja horaria
-  if (!config) return 0
-  const hFranja = parseInt(franja.split(':')[0])
-  let minDesc = 0
-  for (const d of [
-    { hora: config.descanso1Hora, min: config.descanso1Min || 0, dur: config.descanso1Dur || 0 },
-    { hora: config.descanso2Hora, min: config.descanso2Min || 0, dur: config.descanso2Dur || 0 },
-  ]) {
-    if (d.hora === undefined || d.dur === 0) continue
-    // inicio y fin del descanso en minutos absolutos
-    const dIni = d.hora * 60 + d.min
-    const dFin = dIni + d.dur
-    // inicio y fin de la franja en minutos absolutos
-    const fIni = hFranja * 60
-    const fFin = fIni + 60
-    // intersección
-    const overlap = Math.max(0, Math.min(dFin, fFin) - Math.max(dIni, fIni))
-    minDesc += overlap
-  }
-  return minDesc
-}
-
-function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala }) {
-  const W = 500, H = 160, PT = 28, PB = 36, PX = 4
-  const n = franjas.length
-  if (n === 0) return null
-  const slot = (W - PX * 2) / n
-  const barW = Math.max(10, Math.floor(slot) - 4)
-  const chartH = H - PT - PB
-
-  // calcular objetivo proporcional por franja (descontando descanso)
-  function objFranja(franja) {
-    const mDesc = getDescansoParcial(franja, config)
-    return Math.round(objetivo * (60 - mDesc) / 60)
-  }
-
-  const vals = franjas.map(f => produccion[f]?.[sala]).filter(v => v != null)
-  const maxObj = Math.max(...franjas.map(f => objFranja(f)), 1)
-  const maxVal = Math.max(maxObj * 1.35, ...vals, 1)
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-      {franjas.map((franja, i) => {
-        const x = PX + i * slot
-        const xc = x + slot / 2
-        const mDesc = getDescansoParcial(franja, config)
-        const tieneDescanso = mDesc > 0
-        const objF = objFranja(franja)
-        const yObj = PT + chartH - Math.round((objF / maxVal) * chartH)
-        const val = produccion[franja]?.[sala]
-        const hora = franja.split(':')[0].replace(/^0/, '')
-
-        // línea punteada objetivo (por franja, puede variar si hay descanso)
-        const lineEl = (
-          <line key={`obj-${franja}`} x1={x + 1} y1={yObj} x2={x + barW + 1} y2={yObj}
-            stroke="#C8B89A" strokeWidth="1.2" strokeDasharray="3 2" />
-        )
-
-        if (val == null) {
-          return (
-            <g key={franja}>
-              {lineEl}
-              <text x={xc} y={H - PB + 16} textAnchor="middle" fontSize="10" fill="#CCC" fontFamily="system-ui">{hora}</text>
-              <text x={xc} y={PT - 6} textAnchor="middle" fontSize="10" fill="#DDD" fontFamily="system-ui">—</text>
-            </g>
-          )
-        }
-
-        const sobre = val >= objF
-        const color = sobre ? '#1D9E75' : '#E24B4A'
-        const bH = Math.max(6, Math.round((val / maxVal) * chartH))
-        const delta = val - objF
-
-        // overlay gris proporcional al descanso (parte superior de la barra)
-        const descPct = mDesc / 60
-        const overlayH = Math.round(bH * descPct)
-
-        return (
-          <g key={franja}>
-            {lineEl}
-            {/* barra principal */}
-            <rect x={x+2} y={PT + chartH - bH} width={barW} height={bH} fill={color} rx="3" opacity=".88" />
-            {/* overlay descanso encima */}
-            {tieneDescanso && overlayH > 0 && (
-              <rect x={x+2} y={PT + chartH - bH} width={barW} height={overlayH} fill="#B0B0A8" rx="3" opacity=".75" />
-            )}
-            {/* número arriba */}
-            <text x={xc} y={PT + chartH - bH - 6} textAnchor="middle" fontSize="11" fill={color} fontWeight="700" fontFamily="system-ui">{val}</text>
-            {/* hora */}
-            <text x={xc} y={H - PB + 16} textAnchor="middle" fontSize="10" fill="#888" fontFamily="system-ui">{hora}</text>
-            {/* delta */}
-            <text x={xc} y={H - PB + 27} textAnchor="middle" fontSize="9" fill={sobre ? '#1D9E75' : '#E24B4A'} fontWeight="700" fontFamily="system-ui">
-              {delta >= 0 ? `+${delta}` : delta}
-            </text>
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
-
 export default function Tablero({ user, userData, onVerInforme }) {
   const [incidencias, setIncidencias] = useState([])
   const [config, setConfig] = useState(null)
@@ -132,9 +28,6 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [modalConfig, setModalConfig] = useState(false)
   const [panelProduccion, setPanelProduccion] = useState(false)
   const [horaActual, setHoraActual] = useState('')
-  const [produccion, setProduccion] = useState({})
-  const [graficosExpandido, setGraficosExpandido] = useState(false)
-  const [incidenciasExpandido, setIncidenciasExpandido] = useState(true)
 
   useEffect(() => {
     const tick = () => { const n = new Date(); setHoraActual(`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`) }
@@ -142,9 +35,31 @@ export default function Tablero({ user, userData, onVerInforme }) {
   }, [])
 
   useEffect(() => {
+    // Buscar turno activo de hoy — primero intenta con _manana, si no existe busca cualquier turno activo de hoy
     const hoy = new Date()
-    const id = hoy.toISOString().slice(0,10).replace(/-/g,'') + '_manana'
-    setTurnoId(id)
+    const fechaStr = hoy.toISOString().slice(0,10) // "2026-06-08"
+    const idBase = fechaStr.replace(/-/g,'') // "20260608"
+    const idManana = idBase + '_manana'
+
+    getDoc(doc(db,'turnos',idManana)).then(s => {
+      if (s.exists()) {
+        setTurnoId(idManana)
+      } else {
+        // Buscar en todos los turnos uno activo con fecha de hoy
+        getDocs(collection(db,'turnos')).then(snap => {
+          const turnoHoy = snap.docs.find(d => {
+            const data = d.data()
+            return data.fecha === fechaStr && data.estado === 'activo'
+          })
+          if (turnoHoy) {
+            setTurnoId(turnoHoy.id)
+          } else {
+            // Usar el ID por defecto igual (para que ModalIniciarTurno lo cree con ese ID)
+            setTurnoId(idManana)
+          }
+        })
+      }
+    })
   }, [])
 
   useEffect(() => {
@@ -219,248 +134,120 @@ export default function Tablero({ user, userData, onVerInforme }) {
   }
 
   const hayFiltros = sectorFiltro || gradoFiltro
-  const semana = (() => { const d = new Date(); const s = new Date(d.getFullYear(), 0, 1); return Math.ceil(((d - s) / 86400000 + s.getDay() + 1) / 7) })()
-  const objG = config?.objetivoGrande || 350
-  const objC = config?.objetivoChica || 100
 
   return (
-    <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', background: '#F4F4F1', minHeight: '100vh' }}>
-
-      {/* ── HEADER ── */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #EBEBЕ8', padding: '0 24px', height: '56px', display: 'flex', alignItems: 'center', gap: '16px', position: 'sticky', top: 0, zIndex: 5, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-
-        {/* semana + hora */}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', color: '#fff', borderRadius: '8px', padding: '3px 8px', lineHeight: 1 }}>
-            <span style={{ fontSize: '8px', fontWeight: '600', letterSpacing: '.1em', opacity: .7, textTransform: 'uppercase' }}>SEM</span>
-            <span style={{ fontSize: '17px', fontWeight: '800' }}>{semana}</span>
-          </div>
-          <span style={{ fontSize: '28px', fontWeight: '700', color: '#111', letterSpacing: '-1px', lineHeight: 1 }}>{horaActual}</span>
-          <span style={{ fontSize: '11px', color: '#bbb', fontWeight: '400' }}>{config?.inicio || '05:00'} — {config?.fin || '14:00'}</span>
-        </div>
-
-        {/* badge turno + botón + */}
-        {turnoExiste && (
-          <span style={{ fontSize: '10px', padding: '3px 9px', borderRadius: '20px', background: '#EDFBF4', color: '#1D9E75', fontWeight: '700', letterSpacing: '.03em', textTransform: 'uppercase', flexShrink: 0 }}>Turno activo</span>
-        )}
+    <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', background: '#F7F7F5', minHeight: '100vh' }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #EFEFED', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px', position: 'sticky', top: 0, zIndex: 5 }}>
+        <span style={{ fontSize: '16px', fontWeight: '700', color: '#111' }}>Panel de Control</span>
+        <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#EDFBF4', color: '#1D9E75', fontWeight: '600' }}>Turno activo</span>
         {turnoExiste && (
           <button onClick={() => setDrawerOpen('elegir')}
-            style={{ width: '32px', height: '32px', borderRadius: '50%', border: 'none', background: '#185FA5', color: '#fff', fontSize: '22px', fontWeight: '300', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0, boxShadow: '0 2px 8px rgba(24,95,165,0.35)' }}
+            style={{ width: '30px', height: '30px', borderRadius: '50%', border: 'none', background: '#185FA5', color: '#fff', fontSize: '20px', fontWeight: '300', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}
             title="Registrar incidencia">+</button>
         )}
-
-        {/* filtros activos */}
         {hayFiltros && (
           <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-            {gradoFiltro && <span style={{ fontSize: '10px', padding: '3px 9px', borderRadius: '20px', background: gradoBg[gradoFiltro], color: gradoColor[gradoFiltro], fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>{gradoLabel[gradoFiltro]} <span onClick={() => setGradoFiltro(null)} style={{ cursor: 'pointer', opacity: .6 }}>×</span></span>}
-            {sectorFiltro && <span style={{ fontSize: '10px', padding: '3px 9px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>{sectorFiltro} <span onClick={() => setSectorFiltro(null)} style={{ cursor: 'pointer', opacity: .6 }}>×</span></span>}
+            {gradoFiltro && <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: gradoBg[gradoFiltro], color: gradoColor[gradoFiltro], fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>{gradoLabel[gradoFiltro]} <span onClick={() => setGradoFiltro(null)} style={{ cursor: 'pointer', opacity: .7 }}>×</span></span>}
+            {sectorFiltro && <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>{sectorFiltro} <span onClick={() => setSectorFiltro(null)} style={{ cursor: 'pointer', opacity: .7 }}>×</span></span>}
           </div>
         )}
-
-        {/* botones derecha */}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <span style={{ fontSize: '24px', fontWeight: '700', color: '#111', letterSpacing: '-0.5px' }}>{horaActual}</span>
+          <span style={{ fontSize: '12px', color: '#aaa' }}>{config?.inicio || '05:00'} — {config?.fin || '14:00'}</span>
           {turnoExiste && (
-            <button onClick={() => { if(window.confirm('¿Cerrar el turno?')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }}
-              style={{ fontSize: '11px', padding: '5px 11px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '600' }}>
-              ⏹ Cerrar turno
-            </button>
+            <button onClick={() => { if(window.confirm('¿Cerrar el turno? No podrás agregar más incidencias.')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '600' }}>⏹ Cerrar turno</button>
           )}
-          {[
-            ['📦 Producción', () => setPanelProduccion(true)],
-            ['📋 Historial', () => setModalHistorial(true)],
-            ...(userData.rol === 'owner' ? [['⚙️ Config', () => setModalConfig(true)], ['📊 Informes', onVerInforme]] : []),
-          ].map(([label, fn]) => (
-            <button key={label} onClick={fn}
-              style={{ fontSize: '11px', padding: '5px 11px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555', fontWeight: '500' }}>
-              {label}
-            </button>
-          ))}
-          <button onClick={() => signOut(auth)}
-            style={{ fontSize: '11px', padding: '5px 11px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#999' }}>
-            Salir
-          </button>
+          <button onClick={() => setPanelProduccion(true)} style={{ fontSize:'12px', padding:'5px 12px', borderRadius:'8px', border:'1px solid #e8e8e8', background:'#fafafa', cursor:'pointer', color:'#555' }}>📦 Producción</button>
+          <button onClick={() => setModalHistorial(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📋 Historial</button>
+          {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>⚙️ Config</button>}
+          {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📊 Informes</button>}
+          <button onClick={() => signOut(auth)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '8px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#888' }}>Salir</button>
         </div>
       </div>
 
-      {/* ── BODY ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 260px' : '1fr', gap: '0', minHeight: 'calc(100vh - 56px)' }}>
-
-        {/* columna principal */}
-        <div style={{ padding: '16px 0', borderRight: sectoresConInc.length > 0 ? '1px solid #EFEFED' : 'none' }}>
-
-          {/* ── KPIs barra ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px', padding: '0 16px' }}>
-
-            {/* incidencias */}
-            <div style={{ background: '#fff', borderRadius: '12px', padding: '12px 16px', border: '1px solid #EFEFED' }}>
-              <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '6px' }}>Incidencias del turno</div>
-              <div style={{ fontSize: '32px', fontWeight: '800', color: '#E24B4A', lineHeight: 1, marginBottom: '8px' }}>
-                {incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '14px', color: '#bbb', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}
+      <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 280px' : '1fr', gap: '16px', padding: '16px 24px' }}>
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ background: '#fff', borderRadius: '14px', padding: '14px 16px', border: '1px solid #EFEFED' }}>
+              <div style={{ fontSize: '11px', color: '#aaa', fontWeight: '500', marginBottom: '4px' }}>Incidencias del turno</div>
+              <div style={{ fontSize: '28px', fontWeight: '700', color: '#E24B4A', lineHeight: 1, marginBottom: '10px' }}>
+                {incsFiltradas.length}{activas.length !== incsFiltradas.length && <span style={{ fontSize: '14px', color: '#aaa', fontWeight: '400', marginLeft: '6px' }}>de {activas.length}</span>}
               </div>
               {activas.length > 0 && (
-                <div style={{ height: '6px', borderRadius: '3px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '8px' }}>
+                <div style={{ height: '8px', borderRadius: '4px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '10px' }}>
                   {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && (
-                    <div key={g} onClick={() => toggleGrado(g)} style={{ height: '100%', background: gradoColor[g], width: `${Math.round(gradoCount[g]/activas.length*100)}%`, borderRadius: '2px', cursor: 'pointer', opacity: gradoFiltro && gradoFiltro !== g ? 0.25 : 1, transition: 'opacity .15s' }} />
+                    <div key={g} onClick={() => toggleGrado(g)} style={{ height: '100%', background: gradoColor[g], width: `${Math.round(gradoCount[g]/activas.length*100)}%`, borderRadius: '2px', cursor: 'pointer', opacity: gradoFiltro && gradoFiltro !== g ? 0.3 : 1, transition: 'opacity .15s' }} />
                   ))}
                 </div>
               )}
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                 {['critico','moderado','leve','informativo'].map(g => gradoCount[g] > 0 && (
-                  <span key={g} onClick={() => toggleGrado(g)} style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: gradoBg[g], color: gradoColor[g], fontWeight: '700', cursor: 'pointer', border: `1.5px solid ${gradoFiltro === g ? gradoColor[g] : 'transparent'}`, opacity: gradoFiltro && gradoFiltro !== g ? 0.35 : 1 }}>
+                  <span key={g} onClick={() => toggleGrado(g)} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '20px', background: gradoBg[g], color: gradoColor[g], fontWeight: '600', cursor: 'pointer', border: `1.5px solid ${gradoFiltro === g ? gradoColor[g] : 'transparent'}`, opacity: gradoFiltro && gradoFiltro !== g ? 0.4 : 1, transition: 'all .15s' }}>
                     {gradoCount[g]} {gradoLabel[g]}{gradoCount[g] > 1 ? 's' : ''}
                   </span>
                 ))}
               </div>
             </div>
 
-            {/* tiempo perdido */}
-            <div style={{ background: '#fff', borderRadius: '12px', padding: '12px 16px', border: '1px solid #EFEFED' }}>
-              <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '6px' }}>Tiempo perdido</div>
-              <div style={{ fontSize: '32px', fontWeight: '800', color: tiempoTotal > 0 ? '#BA7517' : '#ddd', lineHeight: 1, marginBottom: '8px' }}>
-                {tiempoTotal > 0 ? <>{tiempoTotal}<span style={{ fontSize: '14px', fontWeight: '500', marginLeft: '3px' }}>min</span></> : '—'}
+            <div style={{ background: '#fff', borderRadius: '14px', padding: '14px 16px', border: '1px solid #EFEFED' }}>
+              <div style={{ fontSize: '11px', color: '#aaa', fontWeight: '500', marginBottom: '4px' }}>Tiempo perdido</div>
+              <div style={{ fontSize: '28px', fontWeight: '700', color: '#BA7517', lineHeight: 1, marginBottom: '10px' }}>
+                {tiempoTotal > 0 ? tiempoTotal : '—'}{tiempoTotal > 0 && <span style={{ fontSize: '16px', fontWeight: '500', marginLeft: '4px' }}>min</span>}
               </div>
               {tiempoTotal > 0 ? (
                 <>
-                  <div style={{ height: '6px', borderRadius: '3px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '8px' }}>
+                  <div style={{ height: '8px', borderRadius: '4px', display: 'flex', overflow: 'hidden', gap: '2px', marginBottom: '10px' }}>
                     {tiempoOrdenado.map(([cat, mins], idx) => (
-                      <div key={cat} style={{ height: '100%', background: catColores[idx], width: `${Math.round(mins/tiempoTotal*100)}%`, borderRadius: '2px' }} />
+                      <div key={cat} style={{ height: '100%', background: catColores[idx], width: `${Math.round(mins/tiempoTotal*100)}%`, borderRadius: '2px' }} title={`${cat}: ${mins} min`} />
                     ))}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     {tiempoOrdenado.map(([cat, mins], idx) => (
-                      <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: '#555' }}>
-                        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: catColores[idx], flexShrink: 0 }} />
+                      <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#555' }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: catColores[idx], flexShrink: 0 }} />
                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
-                        <span style={{ fontWeight: '700', color: '#333' }}>{mins} min</span>
+                        <span style={{ fontWeight: '600', color: '#333' }}>{mins} min</span>
                       </div>
                     ))}
                   </div>
                 </>
               ) : (
-                <div style={{ fontSize: '10px', color: '#ccc' }}>Registrá hora de fin para ver el tiempo</div>
+                <div style={{ fontSize: '11px', color: '#ccc' }}>Registrá hora de fin en las incidencias para ver el tiempo</div>
               )}
-            </div>
-
-            {/* producción total */}
-            <div style={{ background: '#fff', borderRadius: '12px', padding: '12px 16px', border: '1px solid #EFEFED' }}>
-              <div style={{ fontSize: '10px', color: '#aaa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '6px' }}>Total producido</div>
-              {(() => {
-                const totalG = Object.values(produccion).reduce((a,p) => a + (p.grande || 0), 0)
-                const totalC = Object.values(produccion).reduce((a,p) => a + (p.chica || 0), 0)
-                const total = totalG + totalC
-                const franjasProd = config ? generarFranjas(config) : []
-                const objTotal = (objG + objC) * franjasProd.length
-                const pct = objTotal > 0 ? Math.round(total / objTotal * 100) : 0
-                const delta = total - objTotal
-                return (
-                  <>
-                    <div style={{ fontSize: '32px', fontWeight: '800', color: '#111', lineHeight: 1, marginBottom: '4px' }}>
-                      {total > 0 ? total.toLocaleString('es-AR') : '—'}
-                    </div>
-                    {total > 0 && (
-                      <>
-                        <div style={{ fontSize: '10px', color: '#bbb', marginBottom: '6px' }}>de {objTotal.toLocaleString('es-AR')} objetivo</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '18px', fontWeight: '800', color: pct >= 100 ? '#1D9E75' : '#E24B4A' }}>{pct}%</span>
-                          <span style={{ fontSize: '11px', color: pct >= 100 ? '#1D9E75' : '#E24B4A', fontWeight: '600' }}>{delta >= 0 ? '+' : ''}{delta.toLocaleString('es-AR')} cuartos</span>
-                        </div>
-                      </>
-                    )}
-                  </>
-                )
-              })()}
             </div>
           </div>
 
-          {/* ── iniciar turno ── */}
           {!turnoExiste && (
             <div onClick={() => setModalIniciarTurno(true)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px solid #1D9E75', borderRadius: '0', padding: '14px', cursor: 'pointer', marginBottom: '12px' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#fff', border: '1.5px solid #1D9E75', borderRadius: '14px', padding: '16px', cursor: 'pointer', marginBottom: '20px' }}
               onMouseEnter={e => e.currentTarget.style.background='#edfbf4'}
               onMouseLeave={e => e.currentTarget.style.background='#fff'}>
-              <span style={{ fontSize: '20px', fontWeight: '300', color: '#1D9E75', lineHeight: 1 }}>▶</span>
-              <span style={{ fontSize: '13px', fontWeight: '600', color: '#1D9E75' }}>Iniciar turno de hoy</span>
+              <span style={{ fontSize: '24px', fontWeight: '300', color: '#1D9E75', lineHeight: 1 }}>▶</span>
+              <span style={{ fontSize: '14px', fontWeight: '600', color: '#1D9E75' }}>Iniciar turno de hoy</span>
+            </div>
+          )}
+          
+          {franjasFiltradas.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#ccc', fontSize: '14px' }}>
+              {hayFiltros ? 'Sin incidencias con los filtros aplicados' : 'Sin incidencias registradas en el turno'}
             </div>
           )}
 
-          {/* ── gráficos hora a hora (colapsable) ── */}
-          {turnoExiste && (
-            <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #EFEFED', marginBottom: '14px', overflow: 'hidden' }}>
-              <div onClick={() => setGraficosExpandido(!graficosExpandido)}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', cursor: 'pointer', userSelect: 'none' }}
-                onMouseEnter={e => e.currentTarget.style.background='#FAFAF8'}
-                onMouseLeave={e => e.currentTarget.style.background=''}>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '.08em' }}>Producción hora a hora</span>
-                <span style={{ fontSize: '10px', color: '#bbb', transition: 'transform .2s', display: 'inline-block', transform: graficosExpandido ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+          {franjasFiltradas.map(franja => (
+            <div key={franja}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px', paddingLeft: '2px' }}>
+                {franja.replace('-', ' — ')}
               </div>
-              {graficosExpandido && (
-                <div style={{ borderTop: '1px solid #F0F0EE', padding: '12px 0 8px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0' }}>
-                  {[
-                    { label: 'Sala grande', sala: 'grande', obj: objG },
-                    { label: 'Sala chica', sala: 'chica', obj: objC },
-                  ].map(({ label, sala, obj }) => (
-                    <div key={sala}>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>{label}</div>
-                      <GraficoHoraAHora
-                        franjas={config ? generarFranjas(config) : []}
-                        produccion={produccion}
-                        objetivo={obj}
-                        config={config}
-                        sala={sala}
-                      />
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '4px', fontSize: '9px', color: '#aaa' }}>
-                        {[['#1D9E75','Sobre obj.'],['#E24B4A','Bajo obj.'],['#E0E0D8','Descanso']].map(([c,t]) => (
-                          <span key={t} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: c, display: 'inline-block' }} />{t}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
+                <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id === ultimaIncId} />
+              ))}
             </div>
-          )}
-
-          {/* ── incidencias (colapsable) ── */}
-          <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #EFEFED', overflow: 'hidden' }}>
-            <div onClick={() => setIncidenciasExpandido(!incidenciasExpandido)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', cursor: 'pointer', userSelect: 'none' }}
-              onMouseEnter={e => e.currentTarget.style.background='#FAFAF8'}
-              onMouseLeave={e => e.currentTarget.style.background=''}>
-              <span style={{ fontSize: '10px', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-                Incidencias {hayFiltros ? `(${incsFiltradas.length} filtradas)` : `(${activas.length})`}
-              </span>
-              <span style={{ fontSize: '10px', color: '#bbb', transition: 'transform .2s', display: 'inline-block', transform: incidenciasExpandido ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
-            </div>
-            {incidenciasExpandido && (
-              <div style={{ borderTop: '1px solid #F0F0EE', padding: '10px 0 0 0' }}>
-                {franjasFiltradas.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '2rem', color: '#ccc', fontSize: '13px' }}>
-                    {hayFiltros ? 'Sin incidencias con los filtros aplicados' : 'Sin incidencias registradas en el turno'}
-                  </div>
-                ) : (
-                  franjasFiltradas.map(franja => (
-                    <div key={franja} style={{ marginBottom: '10px', padding: '0 16px' }}>
-                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '6px', paddingLeft: '16px' }}>
-                        {franja.replace('-', ' — ')}
-                      </div>
-                      {incsFiltradas.filter(i=>i.franja===franja).map(inc => (
-                        <IncCard key={inc.id} inc={inc} turnoId={turnoId} userData={userData} onEditar={setEditando} onEliminar={setEliminando} defaultOpen={inc.id === ultimaIncId} />
-                      ))}
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
+          ))}
         </div>
 
-        {/* ── panel derecho sectores ── */}
         {sectoresConInc.length > 0 && (
-          <div style={{ padding: '20px 16px' }}>
-            <div style={{ fontSize: '9px', fontWeight: '700', color: '#bbb', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '10px' }}>
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>
               Sectores · click filtra · doble click detalle
             </div>
             {sectoresConInc.map(s => (
@@ -476,6 +263,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
       {eliminando && userData.rol === 'owner' && <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />}
       {sectorDetalle && <ModalSector sector={sectorDetalle} incs={activas.filter(i => i.sectoresResponsables?.includes(sectorDetalle))} onClose={() => setSectorDetalle(null)} />}
       {modalConfig && <Configuracion onClose={() => setModalConfig(false)} />}
+      
       {panelProduccion && <Produccion turnoId={turnoId} config={config} onClose={() => setPanelProduccion(false)} />}
       {modalHistorial && <ModalHistorial onClose={() => setModalHistorial(false)} turnoIdActual={turnoId} />}
       {modalIniciarTurno && (
