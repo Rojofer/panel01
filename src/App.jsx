@@ -11,7 +11,7 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [userData, setUserData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [vista, setVista] = useState('tablero') // 'tablero' | 'informe' | 'reportes'
+  const [vista, setVista] = useState('tablero')
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
