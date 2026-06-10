@@ -69,7 +69,6 @@ export default function Tablero({ user, userData, onVerInforme }) {
 
   useEffect(() => {
     if (!turnoId) return
-    getDoc(doc(db,'turnos',turnoId)).then(s => setTurnoExiste(s.exists()))
     const q = query(collection(db,'turnos',turnoId,'incidencias'), orderBy('horaInicio','asc'))
     const unsub = onSnapshot(q, snap => setIncidencias(snap.docs.map(d=>({id:d.id,...d.data()}))))
     getDocs(collection(db,'turnos',turnoId,'produccion')).then(snap => {
@@ -78,6 +77,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
       setProduccion(prod)
     })
     getDoc(doc(db,'turnos',turnoId)).then(s => {
+      setTurnoExiste(s.exists())
       if (s.exists()) {
         const d = s.data()
         if (d.primerIngresoGrande) setPrimerIngresoGrande(d.primerIngresoGrande)
@@ -121,28 +121,10 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const tiempoOrdenado = Object.entries(tiempoPorCategoria).sort((a,b) => b[1]-a[1]).slice(0,4)
   const catColores = ['#BA7517','#E24B4A','#185FA5','#1D9E75','#888780']
 
-  const gradoCount = {
-    critico: incsParaKPI.filter(i=>i.grado==='critico').length,
-    moderado: incsParaKPI.filter(i=>i.grado==='moderado').length,
-    leve: incsParaKPI.filter(i=>i.grado==='leve').length,
-    informativo: incsParaKPI.filter(i=>i.grado==='informativo').length
-  }
+  const gradoCount = incsParaKPI.reduce((acc, i) => { acc[i.grado] = (acc[i.grado] || 0) + 1; return acc }, { critico: 0, moderado: 0, leve: 0, informativo: 0 })
 
   function toggleGrado(g) { setGradoFiltro(gradoFiltro === g ? null : g) }
   function toggleSector(s) { setSectorFiltro(sectorFiltro === s ? null : s) }
-
-  async function iniciarTurno() {
-    await setDoc(doc(db,'turnos',turnoId), {
-      fecha: new Date().toISOString().slice(0,10),
-      nombre: 'Mañana', estado: 'activo',
-      objetivoGrande: config?.objetivoGrande || 350,
-      objetivoChica: config?.objetivoChica || 100,
-      inicio: config?.inicio || '05:00',
-      fin: config?.fin || '14:00',
-      creadoEn: serverTimestamp()
-    })
-    setTurnoExiste(true)
-  }
 
   const hayFiltros = sectorFiltro || gradoFiltro
   const semana = (() => { const d = new Date(); const s = new Date(d.getFullYear(), 0, 1); return Math.ceil(((d - s) / 86400000 + s.getDay() + 1) / 7) })()
@@ -241,15 +223,6 @@ export default function Tablero({ user, userData, onVerInforme }) {
                     </div>
                   </div>
                 )
-              })()}
-              {(() => {
-                const tG = franjaGrafico ? (produccion[franjaGrafico]?.grande||0) : Object.values(produccion).reduce((a,p)=>a+(p.grande||0),0)
-                const tC = franjaGrafico ? (produccion[franjaGrafico]?.chica||0) : Object.values(produccion).reduce((a,p)=>a+(p.chica||0),0)
-                const total = tG+tC
-                const objTotal = franjaGrafico ? (objG+objC) : (objG+objC)*(config?generarFranjas(config):[]).length
-                const pct = objTotal>0?Math.round(total/objTotal*100):0
-                const delta = total-objTotal
-                return null
               })()}
             </div>
           </div>
@@ -443,7 +416,7 @@ function GraficoHoraAHora({ franjas, produccion, objetivo, config, sala, inciden
           <g key={v}>
             {/* línea de grid */}
             <line x1={AXIS_W} y1={y} x2={W} y2={y}
-              stroke={v === 0 ? '#BBBBB5' : '#EBEBЕ8'}
+              stroke={v === 0 ? '#BBBBB5' : '#EBEBE8'}
               strokeWidth={v === 0 ? 1.2 : 0.8}
               strokeDasharray={v === 0 ? 'none' : '3 3'} />
             {/* label eje Y */}
@@ -758,6 +731,20 @@ function IncCard({ inc, turnoId, userData, onEditar, onEliminar, defaultOpen }) 
   )
 }
 
+function BuscadorSector({ sectores, seleccionados, setSeleccionados, busq, setBusq, placeholder }) {
+  const filtrados = busq.length > 0 ? sectores.filter(s => s.toLowerCase().includes(busq.toLowerCase())) : []
+  return (
+    <div>
+      <div style={{position:'relative'}}>
+        <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder={placeholder} style={{width:'100%',fontSize:'12px',padding:'8px 12px',borderRadius:'9px',border:'1.5px solid #e8e8e8',background:'#fafafa',boxSizing:'border-box'}}/>
+        {busq&&<span onClick={()=>setBusq('')} style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#bbb'}}>×</span>}
+      </div>
+      {busq.length>0&&filtrados.length>0&&<div style={{border:'1.5px solid #185FA5',borderRadius:'9px',overflow:'hidden',marginTop:'4px',maxHeight:'150px',overflowY:'auto',background:'#fff',boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>{filtrados.map(s=><div key={s} onClick={()=>{setSeleccionados(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);setBusq('')}} style={{padding:'8px 12px',fontSize:'12px',cursor:'pointer',background:seleccionados.includes(s)?'#f0f6ff':'#fff',borderBottom:'1px solid #f5f5f5',color:seleccionados.includes(s)?'#185FA5':'#333',fontWeight:seleccionados.includes(s)?'600':'400'}}>{seleccionados.includes(s)?'✓ ':''}{s}</div>)}</div>}
+      {seleccionados.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:'5px',marginTop:'6px'}}>{seleccionados.map(r=><span key={r} style={{fontSize:'11px',padding:'3px 8px 3px 10px',borderRadius:'20px',background:'#f0f6ff',color:'#185FA5',border:'1px solid #b5d4f4',display:'flex',alignItems:'center',gap:'4px'}}>{r} <span onClick={()=>setSeleccionados(p=>p.filter(x=>x!==r))} style={{cursor:'pointer',opacity:.6}}>×</span></span>)}</div>}
+    </div>
+  )
+}
+
 function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) {
   const [grado, setGrado] = useState(inc.grado)
   const [descripcion, setDescripcion] = useState(inc.descripcion || '')
@@ -778,23 +765,10 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
   const [busqCat, setBusqCat] = useState('')
   const [catOpen, setCatOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const lineasOpts = sala === 'chica' ? ['L5'] : ['L2','L3','L4']
+  const lineasOpts = sala === 'chica' ? ['L5'] : ['L1','L2','L3','L4']
   const catsFiltradas = categorias.filter(c => c.nombre.toLowerCase().includes(busqCat.toLowerCase()))
   function toggleLinea(l) { setLineas(p => p.includes(l) ? p.filter(x => x !== l) : [...p, l]) }
   function addTag() { if (!tagInput.trim()) return; setEtiquetas(p => [...p, tagInput.trim()]); setTagInput('') }
-  function BuscadorSector({ seleccionados, setSeleccionados, busq, setBusq, placeholder }) {
-    const filtrados = busq.length > 0 ? sectores.filter(s => s.toLowerCase().includes(busq.toLowerCase())) : []
-    return (
-      <div>
-        <div style={{position:'relative'}}>
-          <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder={placeholder} style={{width:'100%',fontSize:'12px',padding:'8px 12px',borderRadius:'9px',border:'1.5px solid #e8e8e8',background:'#fafafa',boxSizing:'border-box'}}/>
-          {busq&&<span onClick={()=>setBusq('')} style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#bbb'}}>×</span>}
-        </div>
-        {busq.length>0&&filtrados.length>0&&<div style={{border:'1.5px solid #185FA5',borderRadius:'9px',overflow:'hidden',marginTop:'4px',maxHeight:'150px',overflowY:'auto',background:'#fff',boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>{filtrados.map(s=><div key={s} onClick={()=>{setSeleccionados(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);setBusq('')}} style={{padding:'8px 12px',fontSize:'12px',cursor:'pointer',background:seleccionados.includes(s)?'#f0f6ff':'#fff',borderBottom:'1px solid #f5f5f5',color:seleccionados.includes(s)?'#185FA5':'#333',fontWeight:seleccionados.includes(s)?'600':'400'}}>{seleccionados.includes(s)?'✓ ':''}{s}</div>)}</div>}
-        {seleccionados.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:'5px',marginTop:'6px'}}>{seleccionados.map(r=><span key={r} style={{fontSize:'11px',padding:'3px 8px 3px 10px',borderRadius:'20px',background:'#f0f6ff',color:'#185FA5',border:'1px solid #b5d4f4',display:'flex',alignItems:'center',gap:'4px'}}>{r} <span onClick={()=>setSeleccionados(p=>p.filter(x=>x!==r))} style={{cursor:'pointer',opacity:.6}}>×</span></span>)}</div>}
-      </div>
-    )
-  }
   async function guardar() {
     setSaving(true)
     await updateDoc(doc(db,'turnos',turnoId,'incidencias',inc.id),{grado,descripcion,categoriaId:categoria,categoriaNombre,sectoresResponsables:responsables,sectoresAfectados:afectados,causaExterna,sala,lineas,horaInicio,horaFin:horaFin||null,franja,etiquetas,editadoPor:userData.nombre,editadoEn:serverTimestamp()})
@@ -855,8 +829,8 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
             </div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px',marginBottom:'20px'}}>
-            <div>{lbl('Sectores responsables',true)}<BuscadorSector seleccionados={responsables} setSeleccionados={setResponsables} busq={busqResp} setBusq={setBusqResp} placeholder="Buscá un sector..."/><button onClick={()=>setCausaExterna(!causaExterna)} style={{marginTop:'8px',fontSize:'11px',padding:'4px 12px',borderRadius:'20px',border:`1.5px ${causaExterna?'solid':'dashed'} ${causaExterna?'#185FA5':'#ddd'}`,background:causaExterna?'#f0f6ff':'#fff',color:causaExterna?'#185FA5':'#aaa',cursor:'pointer'}}>🌐 Causa externa</button></div>
-            <div>{lbl('Sectores afectados',true)}<BuscadorSector seleccionados={afectados} setSeleccionados={setAfectados} busq={busqAfect} setBusq={setBusqAfect} placeholder="Buscá un sector..."/></div>
+            <div>{lbl('Sectores responsables',true)}<BuscadorSector sectores={sectores} seleccionados={responsables} setSeleccionados={setResponsables} busq={busqResp} setBusq={setBusqResp} placeholder="Buscá un sector..."/><button onClick={()=>setCausaExterna(!causaExterna)} style={{marginTop:'8px',fontSize:'11px',padding:'4px 12px',borderRadius:'20px',border:`1.5px ${causaExterna?'solid':'dashed'} ${causaExterna?'#185FA5':'#ddd'}`,background:causaExterna?'#f0f6ff':'#fff',color:causaExterna?'#185FA5':'#aaa',cursor:'pointer'}}>🌐 Causa externa</button></div>
+            <div>{lbl('Sectores afectados',true)}<BuscadorSector sectores={sectores} seleccionados={afectados} setSeleccionados={setAfectados} busq={busqAfect} setBusq={setBusqAfect} placeholder="Buscá un sector..."/></div>
           </div>
           <div style={{marginBottom:'24px'}}>
             {lbl('Etiquetas',true)}
@@ -900,42 +874,6 @@ function ModalEliminar({ inc, turnoId, userData, onClose }) {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={onClose} style={{ flex: 1, padding: '10px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
           <button onClick={confirmar} disabled={saving||!motivo.trim()} style={{ flex: 1, padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: motivo.trim()?'#E24B4A':'#f5a5a5', color: '#fff', border: 'none', cursor: motivo.trim()?'pointer':'not-allowed' }}>{saving?'Eliminando...':'Confirmar'}</button>
-        </div>
-      </div>
-    </>
-  )
-}
-
-function ModalProduccion({ franja, inicial, onGuardar, onClose }) {
-  const [grande, setGrande] = useState(inicial?.grande ?? '')
-  const [chica, setChica] = useState(inicial?.chica ?? '')
-  const [saving, setSaving] = useState(false)
-
-  async function guardar() {
-    setSaving(true)
-    await onGuardar(grande === '' ? null : Number(grande), chica === '' ? null : Number(chica))
-    setSaving(false)
-  }
-
-  return (
-    <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '340px', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '24px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
-        <div style={{ fontSize: '17px', fontWeight: '700', color: '#111', marginBottom: '4px' }}>Producción</div>
-        <div style={{ fontSize: '13px', color: '#aaa', marginBottom: '20px' }}>Franja {franja.replace('-', ' — ')}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '6px' }}>Sala grande (ctos)</div>
-            <input type="number" value={grande} onChange={e => setGrande(e.target.value)} placeholder="0" style={{ width: '100%', fontSize: '16px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '10px 12px', textAlign: 'center' }} />
-          </div>
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: '600', color: '#555', marginBottom: '6px' }}>Sala chica (ctos)</div>
-            <input type="number" value={chica} onChange={e => setChica(e.target.value)} placeholder="0" style={{ width: '100%', fontSize: '16px', borderRadius: '10px', border: '1.5px solid #e8e8e8', padding: '10px 12px', textAlign: 'center' }} />
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={onClose} style={{ flex: 1, padding: '10px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
-          <button onClick={guardar} disabled={saving} style={{ flex: 2, padding: '10px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving?'Guardando...':'Guardar'}</button>
         </div>
       </div>
     </>
