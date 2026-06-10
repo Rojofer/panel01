@@ -27,6 +27,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
   const [modalHistorial, setModalHistorial] = useState(false)
   const [modalConfig, setModalConfig] = useState(false)
   const [panelProduccion, setPanelProduccion] = useState(false)
+  const [modalCerrarTurno, setModalCerrarTurno] = useState(false)
   const [horaActual, setHoraActual] = useState('')
   const [produccion, setProduccion] = useState({})
   const [graficosExpandido, setGraficosExpandido] = useState(false)
@@ -126,6 +127,19 @@ export default function Tablero({ user, userData, onVerInforme }) {
   function toggleGrado(g) { setGradoFiltro(gradoFiltro === g ? null : g) }
   function toggleSector(s) { setSectorFiltro(sectorFiltro === s ? null : s) }
 
+  async function cerrarTurno() {
+    await updateDoc(doc(db,'turnos',turnoId), { estado: 'cerrado' })
+    setTurnoExiste(false)
+    setIncidencias([])
+    setProduccion({})
+    setPrimerIngresoGrande(''); setPrimerIngresoChica('')
+    setUltimoIngresoGrande(''); setUltimoIngresoChica('')
+    setDescGrande([]); setDescChica([])
+    setFranjaGrafico(null)
+    setGradoFiltro(null); setSectorFiltro(null)
+    setModalCerrarTurno(false)
+  }
+
   const hayFiltros = sectorFiltro || gradoFiltro
   const semana = (() => { const d = new Date(); const s = new Date(d.getFullYear(), 0, 1); return Math.ceil(((d - s) / 86400000 + s.getDay() + 1) / 7) })()
   const fechaDisplay = (() => { const d = new Date(); return d.toLocaleDateString('es-AR', { weekday: 'long' }).toUpperCase() + ' ' + String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') })()
@@ -154,7 +168,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
           </div>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '5px', alignItems: 'center' }}>
-          {turnoExiste && <button onClick={() => { if(window.confirm('¿Cerrar el turno?')) { updateDoc(doc(db,'turnos',turnoId),{estado:'cerrado'}); setTurnoExiste(false) } }} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '600' }}>⏹ Cerrar turno</button>}
+          {turnoExiste && <button onClick={() => setModalCerrarTurno(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '600' }}>⏹ Cerrar turno</button>}
           <button onClick={() => setPanelProduccion(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📦 Producción</button>
           <button onClick={() => setModalHistorial(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📋 Historial</button>
           {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>⚙️ Config</button>}
@@ -288,6 +302,7 @@ export default function Tablero({ user, userData, onVerInforme }) {
       {editando && <ModalEditar inc={editando} turnoId={turnoId} categorias={categorias} sectores={sectores} userData={userData} onClose={() => setEditando(null)} />}
       {eliminando && userData.rol === 'owner' && <ModalEliminar inc={eliminando} turnoId={turnoId} userData={userData} onClose={() => setEliminando(null)} />}
       {sectorDetalle && <ModalSector sector={sectorDetalle} incs={activas.filter(i => i.sectoresResponsables?.includes(sectorDetalle))} onClose={() => setSectorDetalle(null)} />}
+      {modalCerrarTurno && <ModalCerrarTurno onConfirm={cerrarTurno} onClose={() => setModalCerrarTurno(false)} />}
       {modalConfig && <Configuracion onClose={() => setModalConfig(false)} />}
       
       {panelProduccion && <Produccion turnoId={turnoId} config={config} onClose={() => setPanelProduccion(false)} />}
@@ -847,6 +862,25 @@ function ModalEditar({ inc, turnoId, categorias, sectores, userData, onClose }) 
   )
 }
 
+
+function ModalCerrarTurno({ onConfirm, onClose }) {
+  const [saving, setSaving] = useState(false)
+  async function confirmar() { setSaving(true); await onConfirm(); setSaving(false) }
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 20 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '380px', background: '#fff', borderRadius: '18px', zIndex: 21, padding: '28px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+        <div style={{ fontSize: '18px', fontWeight: '700', color: '#111', marginBottom: '6px' }}>Cerrar turno</div>
+        <div style={{ fontSize: '13px', color: '#888', marginBottom: '20px', lineHeight: 1.5 }}>Una vez cerrado no podrás agregar más incidencias. Esta acción queda registrada.</div>
+        <div style={{ background: '#fef2f2', border: '1px solid #fde8e8', borderRadius: '10px', padding: '12px 14px', fontSize: '13px', color: '#E24B4A', fontWeight: '600', marginBottom: '20px' }}>⚠️ ¿Estás seguro que querés cerrar el turno?</div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '11px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #e8e8e8', background: '#fff', cursor: 'pointer', color: '#888', fontWeight: '500' }}>Cancelar</button>
+          <button onClick={confirmar} disabled={saving} style={{ flex: 1, padding: '11px', fontSize: '13px', fontWeight: '700', borderRadius: '10px', background: '#E24B4A', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? 'Cerrando...' : 'Cerrar turno'}</button>
+        </div>
+      </div>
+    </>
+  )
+}
 
 function ModalEliminar({ inc, turnoId, userData, onClose }) {
   const [motivo, setMotivo] = useState('')
