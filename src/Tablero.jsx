@@ -5,6 +5,7 @@ import { db, auth } from './firebase'
 import Drawer from './Drawer'
 import Configuracion from './Configuracion'
 import Produccion from './Produccion'
+import MenuLateral from './MenuLateral'
 
 const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', informativo: '#1D9E75' }
 const gradoBg = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
@@ -31,6 +32,7 @@ export default function Tablero({ user, userData, onVerInforme, onVerReportes })
   const [horaActual, setHoraActual] = useState('')
   const [produccion, setProduccion] = useState({})
   const [graficosExpandido, setGraficosExpandido] = useState(false)
+  const [menuLateralOpen, setMenuLateralOpen] = useState(false)
   const [incidenciasExpandido, setIncidenciasExpandido] = useState(true)
   const [franjaGrafico, setFranjaGrafico] = useState(null)
   const [primerIngresoGrande, setPrimerIngresoGrande] = useState('')
@@ -167,15 +169,24 @@ export default function Tablero({ user, userData, onVerInforme, onVerReportes })
             {sectorFiltro && <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: '#f0f6ff', color: '#185FA5', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '3px' }}>{sectorFiltro} <span onClick={() => setSectorFiltro(null)} style={{ cursor: 'pointer', opacity: .6 }}>×</span></span>}
           </div>
         )}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '5px', alignItems: 'center' }}>
-          {turnoExiste && <button onClick={() => setModalCerrarTurno(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #fde8e8', background: '#fef9f9', cursor: 'pointer', color: '#E24B4A', fontWeight: '600' }}>⏹ Cerrar turno</button>}
-          <button onClick={() => setPanelProduccion(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📦 Producción</button>
-          <button onClick={() => setModalHistorial(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📋 Historial</button>
-          {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>⚙️ Config</button>}
-          {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📊 Informes</button>} 
-          {userData.rol === 'owner' && <button onClick={onVerReportes} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📈 Reportes</button>}
-          <button onClick={() => signOut(auth)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#999' }}>Salir</button>
+        <div style={{ marginLeft: 'auto' }}>
+          <button onClick={() => setMenuLateralOpen(true)} style={{ width: '34px', height: '34px', borderRadius: '9px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+            {[0,1,2].map(i => <span key={i} style={{ width: '14px', height: '1.5px', background: '#555', borderRadius: '2px', display: 'block' }} />)}
+          </button>
         </div>
+        <MenuLateral
+          open={menuLateralOpen}
+          onClose={() => setMenuLateralOpen(false)}
+          userData={userData}
+          turnoExiste={turnoExiste}
+          onCerrarTurno={() => setModalCerrarTurno(true)}
+          onProduccion={() => setPanelProduccion(true)}
+          onHistorial={() => setModalHistorial(true)}
+          onConfig={() => setModalConfig(true)}
+          onInforme={onVerInforme}
+          onReportes={onVerReportes}
+          onSalir={() => signOut(auth)}
+        />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: sectoresConInc.length > 0 ? '1fr 260px' : '1fr', minHeight: 'calc(100vh - 54px)' }}>
