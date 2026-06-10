@@ -5,12 +5,13 @@ import { auth, db } from './firebase'
 import Login from './Login'
 import Tablero from './Tablero'
 import Informe from './Informe'
+import Reportes from './Reportes'
 
 export default function App() {
   const [user, setUser] = useState(null)
   const [userData, setUserData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [vistaInforme, setVistaInforme] = useState(false)
+  const [vista, setVista] = useState('tablero') // 'tablero' | 'informe' | 'reportes'
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -39,12 +40,15 @@ export default function App() {
   )
 
   if (!user) return <Login />
+  if (vista === 'informe')  return <Informe  onVolver={() => setVista('tablero')} />
+  if (vista === 'reportes') return <Reportes onVolver={() => setVista('tablero')} />
 
-  if (vistaInforme) return <Informe onVolver={() => setVistaInforme(false)} />
-
-  return <Tablero user={user} userData={userData} onVerInforme={() => setVistaInforme(true)} />
+  return (
+    <Tablero
+      user={user}
+      userData={userData}
+      onVerInforme={() => setVista('informe')}
+      onVerReportes={() => setVista('reportes')}
+    />
+  )
 }
-
-import Reportes from './Reportes'
-// y en el render:
-{vistaReportes && <Reportes onVolver={() => setVistaReportes(false)} />}
