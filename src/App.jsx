@@ -44,3 +44,7 @@ export default function App() {
 
   return <Tablero user={user} userData={userData} onVerInforme={() => setVistaInforme(true)} />
 }
+
+import Reportes from './Reportes'
+// y en el render:
+{vistaReportes && <Reportes onVolver={() => setVistaReportes(false)} />}
