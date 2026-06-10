@@ -10,7 +10,7 @@ const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', i
 const gradoBg = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
 const gradoLabel = { critico: 'Crítica', moderado: 'Moderada', leve: 'Leve', informativo: 'Info' }
 
-export default function Tablero({ user, userData, onVerInforme }) {
+export default function Tablero({ user, userData, onVerInforme, onVerReportes }) {
   const [incidencias, setIncidencias] = useState([])
   const [config, setConfig] = useState(null)
   const [turnoId, setTurnoId] = useState('')
@@ -172,7 +172,8 @@ export default function Tablero({ user, userData, onVerInforme }) {
           <button onClick={() => setPanelProduccion(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📦 Producción</button>
           <button onClick={() => setModalHistorial(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📋 Historial</button>
           {userData.rol === 'owner' && <button onClick={() => setModalConfig(true)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>⚙️ Config</button>}
-          {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📊 Informes</button>}
+          {userData.rol === 'owner' && <button onClick={onVerInforme} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📊 Informes</button>} 
+          {userData.rol === 'owner' && <button onClick={onVerReportes} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#555' }}>📈 Reportes</button>}
           <button onClick={() => signOut(auth)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: '1px solid #e8e8e8', background: '#fafafa', cursor: 'pointer', color: '#999' }}>Salir</button>
         </div>
       </div>
