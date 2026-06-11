@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { collection, doc, getDoc, getDocs, query, orderBy } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, orderBy, updateDoc } from 'firebase/firestore'
 import GraficoHoraAHora, { getDescansoParcial, generarFranjas } from './GraficoHoraAHora'
 import { db } from './firebase'
 
@@ -146,15 +146,19 @@ function TablaDias({ datos, onDiaClick }) {
   const [sortDir, setSortDir] = useState('desc')
 
   const cols = [
-    { key: 'fecha',         label: 'Fecha',       w: '90px' },
-    { key: 'dia',           label: 'Día',         w: '50px' },
-    { key: 'grande',        label: 'Grande',      w: '80px', num: true },
-    { key: 'chica',         label: 'Chica',       w: '70px', num: true },
-    { key: 'total',         label: 'Total',       w: '80px', num: true },
-    { key: 'pct',           label: '% obj',       w: '70px', num: true },
-    { key: 'incidencias',   label: 'Incs.',       w: '60px', num: true },
-    { key: 'tiempoPerdido', label: 'T. perdido',  w: '90px', num: true },
-    { key: 'estado',        label: 'Estado',      w: '80px' },
+    { key: 'fecha',      label: 'Fecha',        w: '90px' },
+    { key: 'dia',        label: 'Día',          w: '44px' },
+    { key: 'grande',     label: 'Grande',       w: '72px', num: true },
+    { key: 'chica',      label: 'Chica',        w: '66px', num: true },
+    { key: 'total',      label: 'Total',        w: '72px', num: true },
+    { key: 'pct',        label: '% obj',        w: '60px', num: true },
+    { key: 'tiempoNeto', label: 'T. neto',      w: '72px', num: true },
+    { key: 'descansos',  label: 'Descanso',     w: '72px', num: true },
+    { key: 'L1',         label: 'L1',           w: '56px', num: true },
+    { key: 'L2',         label: 'L2',           w: '56px', num: true },
+    { key: 'L3',         label: 'L3',           w: '56px', num: true },
+    { key: 'L4',         label: 'L4',           w: '56px', num: true },
+    { key: 'L5',         label: 'L5',           w: '56px', num: true },
   ]
 
   function toggleSort(col) {
@@ -163,11 +167,36 @@ function TablaDias({ datos, onDiaClick }) {
   }
 
   const filas = useMemo(() => {
-    return Object.values(datos).map(d => ({
-      ...d,
-      dia: DIAS_CORTOS[diaSemana(...d.fecha.split('-').map(Number))],
-      pct: pct(d.total, d.objTotal),
-    })).sort((a, b) => {
+    return Object.values(datos).map(d => {
+      // tiempo neto
+      const pi = d.primerIngresoGrande || d.primerIngresoChica
+      const ui = d.ultimoIngresoGrande || d.ultimoIngresoChica
+      let tiempoNeto = null, descansos = null
+      if (pi && ui) {
+        const [h1,m1] = pi.split(':').map(Number)
+        const [h2,m2] = ui.split(':').map(Number)
+        const dur = (h2*60+m2) - (h1*60+m1)
+        const descG = (d.descansosGrande||[]).reduce((s,x)=>s+Number(x.dur||0),0)
+        const descC = (d.descansosChica||[]).reduce((s,x)=>s+Number(x.dur||0),0)
+        descansos = Math.round((descG + descC) / 2)
+        tiempoNeto = dur - descansos
+      }
+      // lineas acumuladas
+      const prod = d.produccionData || {}
+      const linTotales = {}
+      ;['L1','L2','L3','L4'].forEach(l => {
+        const t = Object.values(prod).reduce((s,p)=>s+(p.lineas?.[l]||0),0)
+        linTotales[l] = t > 0 ? t : null
+      })
+      linTotales['L5'] = d.chica > 0 ? d.chica : null
+      return {
+        ...d,
+        dia: DIAS_CORTOS[diaSemana(...d.fecha.split('-').map(Number))],
+        pct: pct(d.total, d.objTotal),
+        tiempoNeto, descansos,
+        L1: linTotales.L1, L2: linTotales.L2, L3: linTotales.L3, L4: linTotales.L4, L5: linTotales.L5,
+      }
+    }).sort((a, b) => {
       let va = a[sortCol], vb = b[sortCol]
       if (typeof va === 'string') va = va.toLowerCase(), vb = vb.toLowerCase()
       return sortDir === 'asc' ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1)
@@ -202,19 +231,19 @@ function TablaDias({ datos, onDiaClick }) {
                 style={{ borderBottom: `1px solid ${C.borde}`, background: i % 2 === 0 ? '#fff' : '#FAFAF8', cursor: 'pointer' }}
                 onMouseEnter={e => e.currentTarget.style.background = C.azulClaro}
                 onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#FAFAF8'}>
-                <td style={{ padding: '9px 12px', fontWeight: '600', color: C.texto }}>{f.fecha}</td>
-                <td style={{ padding: '9px 12px', color: C.sub }}>{f.dia}</td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: '600', color: f.grande >= f.objGrande ? C.verde : C.rojo }}>{formatNum(f.grande)}</td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: '600', color: f.chica  >= f.objChica  ? C.verde : C.rojo }}>{formatNum(f.chica)}</td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: '800', color: C.texto }}>{formatNum(f.total)}</td>
-                <td style={{ padding: '9px 12px', textAlign: 'right' }}>
-                  <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '20px', background: rowBg, color: rowColor }}>{p}%</span>
+                <td style={{ padding: '8px 10px', fontWeight: '600', color: C.texto, whiteSpace: 'nowrap' }}>{f.fecha}</td>
+                <td style={{ padding: '8px 6px', color: C.sub, fontSize: '11px' }}>{f.dia}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: f.grande >= f.objGrande ? C.verde : C.rojo }}>{formatNum(f.grande)}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: f.chica  >= f.objChica  ? C.verde : C.rojo }}>{formatNum(f.chica)}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: C.texto }}>{formatNum(f.total)}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                  <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '20px', background: rowBg, color: rowColor }}>{p}%</span>
                 </td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', color: f.incidencias > 0 ? C.rojo : C.sub, fontWeight: f.incidencias > 0 ? '700' : '400' }}>{f.incidencias}</td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', color: f.tiempoPerdido > 0 ? C.naranja : C.sub }}>{f.tiempoPerdido > 0 ? `${f.tiempoPerdido}m` : '—'}</td>
-                <td style={{ padding: '9px 12px' }}>
-                  <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: f.estado === 'cerrado' ? C.grisClaro : C.verdeClaro, color: f.estado === 'cerrado' ? C.gris : C.verde, fontWeight: '600' }}>{f.estado}</span>
-                </td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', color: f.tiempoNeto ? C.texto : C.sub, fontWeight: '500' }}>{f.tiempoNeto ? `${f.tiempoNeto}m` : '—'}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', color: f.descansos > 0 ? C.naranja : C.sub }}>{f.descansos > 0 ? `${f.descansos}m` : '—'}</td>
+                {['L1','L2','L3','L4','L5'].map(l => (
+                  <td key={l} style={{ padding: '8px 10px', textAlign: 'right', color: f[l] ? (l==='L5'?C.naranja:C.azul) : '#ddd', fontSize: '11px', fontWeight: f[l] ? '600' : '400' }}>{f[l] ? formatNum(f[l]) : '—'}</td>
+                ))}
               </tr>
             )
           })}
@@ -408,9 +437,43 @@ function ModalDia({ fecha, dato, config, onClose }) {
           {incs.length === 0 && franjas.length === 0 && (
             <div style={{ textAlign: 'center', padding: '20px', color: '#ccc', fontSize: '13px' }}>Sin datos detallados para este día</div>
           )}
+
+          {/* Nota del día */}
+          <NotaDia turnoId={dato.turnoId} notaInicial={dato.notaDia} />
         </div>
       </div>
     </>
+  )
+}
+
+function NotaDia({ turnoId, notaInicial }) {
+  const [nota, setNota] = useState(notaInicial || '')
+  const [guardando, setGuardando] = useState(false)
+  const [guardado, setGuardado] = useState(false)
+
+  async function guardar() {
+    if (!turnoId) return
+    setGuardando(true)
+    await updateDoc(doc(db,'turnos',turnoId), { notaDia: nota })
+    setGuardando(false)
+    setGuardado(true)
+    setTimeout(() => setGuardado(false), 2000)
+  }
+
+  return (
+    <div style={{ marginTop: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em' }}>Nota del día</div>
+        {guardado && <span style={{ fontSize: '10px', color: C.verde, fontWeight: '600' }}>✓ Guardado</span>}
+      </div>
+      <textarea
+        value={nota}
+        onChange={e => setNota(e.target.value)}
+        onBlur={guardar}
+        placeholder="Agregá una nota sobre este turno..."
+        style={{ width: '100%', minHeight: '80px', fontSize: '13px', borderRadius: '10px', border: `1.5px solid ${C.borde}`, padding: '10px 12px', fontFamily: 'inherit', lineHeight: '1.5', resize: 'vertical', boxSizing: 'border-box', color: C.texto, background: guardando ? C.grisClaro : '#fff' }}
+      />
+    </div>
   )
 }
 
@@ -477,6 +540,7 @@ export default function Reportes({ onVolver }) {
           ultimoIngresoChica:  turno.ultimoIngresoChica  || null,
           descansosGrande: turno.descansosGrande || [],
           descansosChica:  turno.descansosChica  || [],
+          notaDia: turno.notaDia || '',
         }
       }))
       setDatos(resultado)
