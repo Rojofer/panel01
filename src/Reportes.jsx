@@ -244,6 +244,8 @@ function ModalDia({ fecha, dato, config, onClose }) {
     if (total > 0) acc[l] = total
     return acc
   }, {})
+  // L5 = sala chica total
+  if (dato.chica > 0) lineasTotales['L5'] = dato.chica
 
   // incidencias por categoría para ranking
   const rankingCat = incs.filter(i=>i.grado!=='informativo').reduce((acc,i) => {
@@ -262,7 +264,7 @@ function ModalDia({ fecha, dato, config, onClose }) {
         <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${C.borde}`, position: 'sticky', top: 0, background: '#fff', zIndex: 2, borderRadius: '18px 18px 0 0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: '18px', fontWeight: '800', color: C.texto }}>{nombreDia} {d} de {MESES[m-1]}</div>
+              <div style={{ fontSize: '18px', fontWeight: '800', color: C.texto }}>{nombreDia} {d} de {MESES[m-1]} de {y}</div>
               <div style={{ fontSize: '11px', color: C.sub, marginTop: '2px' }}>{fecha} · <span style={{ color: dato.estado === 'cerrado' ? C.gris : C.verde, fontWeight: '600' }}>{dato.estado}</span></div>
             </div>
             <button onClick={onClose} style={{ width: '32px', height: '32px', borderRadius: '8px', border: `1px solid ${C.borde}`, background: C.grisClaro, cursor: 'pointer', fontSize: '18px', color: C.sub }}>×</button>
@@ -271,29 +273,41 @@ function ModalDia({ fecha, dato, config, onClose }) {
 
         <div style={{ padding: '20px 24px' }}>
 
-          {/* KPIs fila */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
-            <KPICard label="Total producido" value={formatNum(dato.total)} sub={`obj ${formatNum(dato.objTotal)}`} />
-            <KPICard label="Cumplimiento" value={`${p}%`} sub={`${dato.total >= dato.objTotal ? '+' : ''}${formatNum(dato.total - dato.objTotal)}`} color={pColor} bg={p >= 100 ? C.verdeClaro : p >= 80 ? C.naranjaClaro : C.rojoClaro} border={p >= 100 ? C.verdeBorde : p >= 80 ? '#F5D79A' : C.rojoBorde} />
-            <KPICard label="Incidencias" value={dato.incidencias} sub={dato.tiempoPerdido > 0 ? `${dato.tiempoPerdido} min perdidos` : 'Sin tiempo perdido'} color={dato.incidencias > 0 ? C.rojo : C.gris} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-              <div style={{ background: C.grisClaro, borderRadius: '10px', padding: '10px 12px' }}>
-                <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', marginBottom: '4px' }}>Grande</div>
-                <div style={{ fontSize: '16px', fontWeight: '800', color: dato.grande >= dato.objGrande ? C.verde : C.rojo }}>{formatNum(dato.grande)}</div>
-                <div style={{ fontSize: '10px', color: C.sub }}>{pct(dato.grande,dato.objGrande)}%</div>
+          {/* KPIs fila — compactos */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            {/* total */}
+            <div style={{ background: C.grisClaro, borderRadius: '10px', padding: '8px 14px', border: `1px solid ${C.grisBorde}` }}>
+              <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '3px' }}>Total producido</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <span style={{ fontSize: '20px', fontWeight: '800', color: C.texto, letterSpacing: '-0.5px' }}>{formatNum(dato.total)}</span>
+                <span style={{ fontSize: '10px', color: C.sub }}>de {formatNum(dato.objTotal)}</span>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: pColor }}>{p}%</span>
               </div>
-              <div style={{ background: C.grisClaro, borderRadius: '10px', padding: '10px 12px' }}>
-                <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', marginBottom: '4px' }}>Chica</div>
-                <div style={{ fontSize: '16px', fontWeight: '800', color: dato.chica >= dato.objChica ? C.verde : C.rojo }}>{formatNum(dato.chica)}</div>
-                <div style={{ fontSize: '10px', color: C.sub }}>{pct(dato.chica,dato.objChica)}%</div>
+            </div>
+            {/* grande */}
+            <div style={{ background: C.grisClaro, borderRadius: '10px', padding: '8px 14px', border: `1px solid ${C.grisBorde}` }}>
+              <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '3px' }}>Sala grande</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <span style={{ fontSize: '20px', fontWeight: '800', color: dato.grande >= dato.objGrande ? C.verde : C.rojo, letterSpacing: '-0.5px' }}>{formatNum(dato.grande)}</span>
+                <span style={{ fontSize: '10px', color: C.sub }}>obj {formatNum(dato.objGrande)}</span>
+                <span style={{ fontSize: '11px', fontWeight: '700', color: dato.grande >= dato.objGrande ? C.verde : C.rojo }}>{pct(dato.grande,dato.objGrande)}%</span>
+              </div>
+            </div>
+            {/* chica */}
+            <div style={{ background: C.grisClaro, borderRadius: '10px', padding: '8px 14px', border: `1px solid ${C.grisBorde}` }}>
+              <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '3px' }}>Sala chica</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <span style={{ fontSize: '20px', fontWeight: '800', color: dato.chica >= dato.objChica ? C.verde : C.rojo, letterSpacing: '-0.5px' }}>{formatNum(dato.chica)}</span>
+                <span style={{ fontSize: '10px', color: C.sub }}>obj {formatNum(dato.objChica)}</span>
+                <span style={{ fontSize: '11px', fontWeight: '700', color: dato.chica >= dato.objChica ? C.verde : C.rojo }}>{pct(dato.chica,dato.objChica)}%</span>
               </div>
             </div>
           </div>
 
           {/* Gráficos hora a hora */}
           {franjas.length > 0 && (
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '10px' }}>Producción hora a hora</div>
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: C.texto, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '12px' }}>Producción hora a hora</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 {[{label:'Sala grande',sala:'grande',obj:objG},{label:'Sala chica',sala:'chica',obj:objC}].map(({label,sala,obj})=>(
                   <GraficoHoraAHora key={sala}
@@ -313,13 +327,14 @@ function ModalDia({ fecha, dato, config, onClose }) {
               <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Producción por línea</div>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Object.keys(lineasTotales).length},1fr)`, gap: '8px' }}>
                 {Object.entries(lineasTotales).map(([l,v]) => {
-                  const barPct = Math.round(v / dato.grande * 100)
+                  const barPct = l==='L5' ? Math.round(v / dato.chica * 100) : Math.round(v / dato.grande * 100)
                   return (
-                    <div key={l} style={{ background: C.azulClaro, borderRadius: '10px', padding: '12px', border: `1px solid ${C.azulBorde}` }}>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: C.azul, marginBottom: '6px' }}>{l}</div>
-                      <div style={{ fontSize: '22px', fontWeight: '800', color: C.azul }}>{formatNum(v)}</div>
-                      <div style={{ height: '4px', background: '#dce8f5', borderRadius: '2px', marginTop: '8px' }}>
-                        <div style={{ height: '100%', width: `${barPct}%`, background: C.azul, borderRadius: '2px' }} />
+                    <div key={l} style={{ background: l==='L5'?C.naranjaClaro:C.azulClaro, borderRadius: '10px', padding: '12px', border: `1px solid ${l==='L5'?'#F5D79A':C.azulBorde}` }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: l==='L5'?C.naranja:C.azul, marginBottom: '3px' }}>{l}</div>
+                      {l==='L5'&&<div style={{ fontSize:'9px', color: C.naranja, opacity:.7, marginBottom:'4px' }}>chica</div>}
+                      <div style={{ fontSize: '22px', fontWeight: '800', color: l==='L5'?C.naranja:C.azul }}>{formatNum(v)}</div>
+                      <div style={{ height: '4px', background: l==='L5'?'#f5e6c0':'#dce8f5', borderRadius: '2px', marginTop: '8px' }}>
+                        <div style={{ height: '100%', width: `${barPct}%`, background: l==='L5'?C.naranja:C.azul, borderRadius: '2px' }} />
                       </div>
                       <div style={{ fontSize: '10px', color: C.sub, marginTop: '3px' }}>{barPct}% del total</div>
                     </div>
