@@ -78,7 +78,7 @@ export default function Produccion({ turnoId, config, onClose }) {
     setEditando(franja)
     setChica(prod?.chica ?? '')
     // cargar líneas activas y valores
-    const activas = prod?.lineas ? Object.keys(prod.lineas) : []
+    const activas = prod?.lineas ? LINEAS_GRANDE.filter(l => prod.lineas[l] != null) : []
     setLineasActivas(activas)
     setLineasValores({
       L1: prod?.lineas?.L1 ?? '',
@@ -89,9 +89,10 @@ export default function Produccion({ turnoId, config, onClose }) {
   }
 
   function toggleLinea(l) {
-    setLineasActivas(prev =>
-      prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l]
-    )
+    setLineasActivas(prev => {
+      const next = prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l]
+      return LINEAS_GRANDE.filter(x => next.includes(x))
+    })
   }
 
   // total sala grande = suma de líneas activas con valor
@@ -246,7 +247,7 @@ export default function Produccion({ turnoId, config, onClose }) {
                           <span style={{color:prod.grande>=objG?'#1D9E75':'#E24B4A',marginRight:'8px'}}>G: <strong>{prod.grande??'—'}</strong></span>
                           {tieneLineas && (
                             <span style={{fontSize:'10px',color:'#aaa'}}>
-                              {Object.entries(prod.lineas).map(([l,v])=>`${l}:${v}`).join(' ')}
+                              {LINEAS_GRANDE.filter(l => prod.lineas[l] != null).map(l => `${l}:${prod.lineas[l]}`).join(' ')}
                             </span>
                           )}
                           <span style={{color:prod.chica>=objC?'#1D9E75':'#E24B4A',marginLeft:'8px'}}>Ch: <strong>{prod.chica??'—'}</strong></span>
