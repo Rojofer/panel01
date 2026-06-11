@@ -3,15 +3,11 @@ import { collection, doc, getDocs, getDoc, setDoc, updateDoc, serverTimestamp } 
 import { db } from './firebase'
 
 const DESCANSO_VACIO = { hora: '', min: 0, dur: 0 }
-const LINEAS_GRANDE = ['L1','L2','L3','L4']
-
 export default function Produccion({ turnoId, config, onClose }) {
   const [produccion, setProduccion] = useState({})
   const [editando, setEditando] = useState(null)
   // campos de edición
-  const [chica, setChica] = useState('')
-  const [lineasActivas, setLineasActivas] = useState([])
-  const [lineasValores, setLineasValores] = useState({ L1:'', L2:'', L3:'', L4:'' })
+  const [lineas, setLineas] = useState({ L1:'', L2:'', L3:'', L4:'', L5:'' })
   const [saving, setSaving] = useState(false)
 
   // ingresos
@@ -76,29 +72,18 @@ export default function Produccion({ turnoId, config, onClose }) {
   function abrirEditar(franja) {
     const prod = produccion[franja]
     setEditando(franja)
-    setChica(prod?.chica ?? '')
-    // cargar líneas activas y valores
-    const activas = prod?.lineas ? LINEAS_GRANDE.filter(l => prod.lineas[l] != null) : []
-    setLineasActivas(activas)
-    setLineasValores({
+    setLineas({
       L1: prod?.lineas?.L1 ?? '',
       L2: prod?.lineas?.L2 ?? '',
       L3: prod?.lineas?.L3 ?? '',
       L4: prod?.lineas?.L4 ?? '',
+      L5: prod?.chica ?? '',
     })
   }
 
-  function toggleLinea(l) {
-    setLineasActivas(prev => {
-      const next = prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l]
-      return LINEAS_GRANDE.filter(x => next.includes(x))
-    })
-  }
-
-  // total sala grande = suma de líneas activas con valor
-  const totalGrande = lineasActivas.reduce((sum, l) => {
-    const v = Number(lineasValores[l])
-    return sum + (isNaN(v) ? 0 : v)
+  const totalGrande = ['L1','L2','L3','L4'].reduce((sum, l) => {
+    const v = Number(lineas[l])
+    return sum + (isNaN(v) || lineas[l] === '' ? 0 : v)
   }, 0)
 
   async function guardar() {
@@ -106,14 +91,15 @@ export default function Produccion({ turnoId, config, onClose }) {
     setSaving(true)
     const franjaId = editando.replace(/:/g,'').replace('-','_')
     const lineasData = {}
-    lineasActivas.forEach(l => {
-      lineasData[l] = lineasValores[l] === '' ? null : Number(lineasValores[l])
+    let tieneLineas = false
+    ;['L1','L2','L3','L4'].forEach(l => {
+      if (lineas[l] !== '') { lineasData[l] = Number(lineas[l]); tieneLineas = true }
     })
     const data = {
       franja: editando,
-      grande: lineasActivas.length > 0 ? totalGrande : null,
-      chica:  chica === '' ? null : Number(chica),
-      lineas: lineasActivas.length > 0 ? lineasData : null,
+      grande: tieneLineas ? totalGrande : null,
+      chica:  lineas.L5 === '' ? null : Number(lineas.L5),
+      lineas: tieneLineas ? lineasData : null,
       cargadoEn: serverTimestamp()
     }
     await setDoc(doc(db,'turnos',turnoId,'produccion',franjaId), data)
@@ -260,39 +246,24 @@ export default function Produccion({ turnoId, config, onClose }) {
 
                 {esEdit && (
                   <div>
-                    {/* Sala grande — por línea */}
+                    {/* Líneas L1–L5 */}
                     <div style={{marginBottom:'12px'}}>
-                      <div style={{fontSize:'11px',fontWeight:'700',color:'#555',marginBottom:'8px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                        <span>Sala grande</span>
-                        {lineasActivas.length > 0 && <span style={{fontSize:'12px',fontWeight:'800',color:'#185FA5'}}>Total: {totalGrande}</span>}
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+                        <span style={{fontSize:'11px',fontWeight:'700',color:'#555'}}>Producción por línea</span>
+                        {totalGrande > 0 && <span style={{fontSize:'12px',fontWeight:'800',color:'#185FA5'}}>Grande: {totalGrande}</span>}
                       </div>
-                      <div style={{display:'flex',gap:'6px',flexWrap:'wrap',marginBottom:'10px'}}>
-                        {LINEAS_GRANDE.map(l=>(
-                          <button key={l} onClick={()=>toggleLinea(l)}
-                            style={{padding:'4px 12px',fontSize:'12px',borderRadius:'20px',fontWeight:lineasActivas.includes(l)?'700':'400',border:`1.5px solid ${lineasActivas.includes(l)?'#185FA5':'#e8e8e8'}`,background:lineasActivas.includes(l)?'#185FA5':'#fafafa',color:lineasActivas.includes(l)?'#fff':'#888',cursor:'pointer'}}>
-                            {l}
-                          </button>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'8px'}}>
+                        {['L1','L2','L3','L4','L5'].map(l => (
+                          <div key={l}>
+                            <div style={{fontSize:'10px',fontWeight:'700',color: l==='L5'?'#BA7517':'#185FA5',textAlign:'center',marginBottom:'5px',letterSpacing:'.04em'}}>
+                              {l}{l==='L5'&&<span style={{fontSize:'8px',color:'#bbb',fontWeight:'400',display:'block'}}>chica</span>}
+                            </div>
+                            <input type="number" value={lineas[l]} placeholder="—"
+                              onChange={e => setLineas(p => ({...p, [l]: e.target.value}))}
+                              style={{width:'100%',fontSize:'16px',fontWeight:'700',borderRadius:'9px',border:`1.5px solid ${lineas[l]!==''?(l==='L5'?'#BA7517':'#185FA5'):'#e8e8e8'}`,padding:'9px 4px',textAlign:'center',color:l==='L5'?'#BA7517':'#185FA5',background:lineas[l]!==''?(l==='L5'?'#FFFBF4':'#f0f6ff'):'#fafafa',boxSizing:'border-box'}}/>
+                          </div>
                         ))}
                       </div>
-                      {lineasActivas.length > 0 && (
-                        <div style={{display:'grid',gridTemplateColumns:`repeat(${lineasActivas.length},1fr)`,gap:'8px'}}>
-                          {lineasActivas.map(l=>(
-                            <div key={l}>
-                              <div style={{fontSize:'10px',color:'#aaa',marginBottom:'4px',textAlign:'center',fontWeight:'600'}}>{l}</div>
-                              <input type="number" value={lineasValores[l]} placeholder="0"
-                                onChange={e=>setLineasValores(p=>({...p,[l]:e.target.value}))}
-                                style={{width:'100%',fontSize:'15px',borderRadius:'8px',border:'1.5px solid #185FA5',padding:'8px 6px',textAlign:'center',fontWeight:'700',color:'#185FA5'}}/>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Sala chica */}
-                    <div style={{marginBottom:'12px'}}>
-                      <div style={{fontSize:'11px',fontWeight:'700',color:'#555',marginBottom:'6px'}}>Sala chica (L5)</div>
-                      <input type="number" value={chica} onChange={e=>setChica(e.target.value)} placeholder="0"
-                        style={{width:'100%',fontSize:'15px',borderRadius:'8px',border:'1.5px solid #e8e8e8',padding:'8px 10px',textAlign:'center'}}/>
                     </div>
 
                     <div style={{display:'flex',gap:'6px'}}>
