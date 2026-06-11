@@ -247,6 +247,23 @@ function ModalDia({ fecha, dato, config, onClose }) {
   // L5 = sala chica total
   if (dato.chica > 0) lineasTotales['L5'] = dato.chica
 
+  // tiempo productivo neto
+  const calcTiempoNeto = () => {
+    const pi = dato.primerIngresoGrande || dato.primerIngresoChica
+    const ui = dato.ultimoIngresoGrande || dato.ultimoIngresoChica
+    if (!pi || !ui) return null
+    const [h1,m1] = pi.split(':').map(Number)
+    const [h2,m2] = ui.split(':').map(Number)
+    const duracion = (h2*60+m2) - (h1*60+m1)
+    if (duracion <= 0) return null
+    const descG = (dato.descansosGrande||[]).reduce((s,d)=>s+Number(d.dur||0),0)
+    const descC = (dato.descansosChica||[]).reduce((s,d)=>s+Number(d.dur||0),0)
+    const descTotal = Math.round((descG + descC) / 2) // promedio si son distintos
+    const neto = duracion - descTotal
+    return { duracion, descTotal, neto, pi, ui }
+  }
+  const tiempoNeto = calcTiempoNeto()
+
   // incidencias por categoría para ranking
   const rankingCat = incs.filter(i=>i.grado!=='informativo').reduce((acc,i) => {
     const k = i.categoriaNombre||'Sin categoría'
@@ -302,6 +319,18 @@ function ModalDia({ fecha, dato, config, onClose }) {
                 <span style={{ fontSize: '11px', fontWeight: '700', color: dato.chica >= dato.objChica ? C.verde : C.rojo }}>{pct(dato.chica,dato.objChica)}%</span>
               </div>
             </div>
+            {tiempoNeto && (
+              <div style={{ background: C.grisClaro, borderRadius: '10px', padding: '8px 14px', border: `1px solid ${C.grisBorde}` }}>
+                <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '3px' }}>Tiempo neto</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                  <span style={{ fontSize: '20px', fontWeight: '800', color: C.texto, letterSpacing: '-0.5px' }}>{tiempoNeto.neto}m</span>
+                  <span style={{ fontSize: '10px', color: C.sub }}>{tiempoNeto.pi} → {tiempoNeto.ui}</span>
+                </div>
+                <div style={{ fontSize: '10px', color: C.sub, marginTop: '1px' }}>
+                  {tiempoNeto.duracion}m turno · {tiempoNeto.descTotal > 0 ? `−${tiempoNeto.descTotal}m descanso` : 'sin descanso'}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Gráficos hora a hora */}
@@ -325,14 +354,13 @@ function ModalDia({ fecha, dato, config, onClose }) {
           {Object.keys(lineasTotales).length > 0 && (
             <div style={{ marginBottom: '20px' }}>
               <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Producción por línea</div>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Object.keys(lineasTotales).length},1fr)`, gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Object.keys(lineasTotales).length},1fr)`, gap: '6px' }}>
                 {Object.entries(lineasTotales).map(([l,v]) => {
                   const barPct = l==='L5' ? Math.round(v / dato.chica * 100) : Math.round(v / dato.grande * 100)
                   return (
-                    <div key={l} style={{ background: l==='L5'?C.naranjaClaro:C.azulClaro, borderRadius: '10px', padding: '12px', border: `1px solid ${l==='L5'?'#F5D79A':C.azulBorde}` }}>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: l==='L5'?C.naranja:C.azul, marginBottom: '3px' }}>{l}</div>
-                      {l==='L5'&&<div style={{ fontSize:'9px', color: C.naranja, opacity:.7, marginBottom:'4px' }}>chica</div>}
-                      <div style={{ fontSize: '22px', fontWeight: '800', color: l==='L5'?C.naranja:C.azul }}>{formatNum(v)}</div>
+                    <div key={l} style={{ background: l==='L5'?C.naranjaClaro:C.azulClaro, borderRadius: '8px', padding: '8px 10px', border: `1px solid ${l==='L5'?'#F5D79A':C.azulBorde}` }}>
+                      <div style={{ fontSize: '10px', fontWeight: '700', color: l==='L5'?C.naranja:C.azul, marginBottom: '1px' }}>{l}{l==='L5'&&<span style={{fontSize:'8px',opacity:.6,marginLeft:'3px'}}>chica</span>}</div>
+                      <div style={{ fontSize: '18px', fontWeight: '800', color: l==='L5'?C.naranja:C.azul }}>{formatNum(v)}</div>
                       <div style={{ height: '4px', background: l==='L5'?'#f5e6c0':'#dce8f5', borderRadius: '2px', marginTop: '8px' }}>
                         <div style={{ height: '100%', width: `${barPct}%`, background: l==='L5'?C.naranja:C.azul, borderRadius: '2px' }} />
                       </div>
@@ -443,6 +471,12 @@ export default function Reportes({ onVolver }) {
           incidencias: incidencias.length, tiempoPerdido,
           produccionData: prod, incidenciasData: incidencias,
           lineas: null,
+          primerIngresoGrande: turno.primerIngresoGrande || null,
+          primerIngresoChica:  turno.primerIngresoChica  || null,
+          ultimoIngresoGrande: turno.ultimoIngresoGrande || null,
+          ultimoIngresoChica:  turno.ultimoIngresoChica  || null,
+          descansosGrande: turno.descansosGrande || [],
+          descansosChica:  turno.descansosChica  || [],
         }
       }))
       setDatos(resultado)
