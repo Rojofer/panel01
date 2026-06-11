@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { collection, doc, getDoc, getDocs, query, orderBy } from 'firebase/firestore'
+import GraficoHoraAHora, { getDescansoParcial, generarFranjas } from './GraficoHoraAHora'
 import { db } from './firebase'
 
 // ── Paleta ──────────────────────────────────────────────────────────────────
+const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', informativo: '#1D9E75' }
+const gradoBg    = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
 const C = {
   verde:   '#1D9E75', verdeClaro: '#EDFBF4', verdeBorde: '#A8DFC8',
   rojo:    '#E24B4A', rojoClaro:  '#FEF2F2', rojoBorde:  '#F5C0BF',
@@ -222,62 +225,100 @@ function TablaDias({ datos, onDiaClick }) {
 }
 
 // ── Modal detalle día ─────────────────────────────────────────────────────────
-function ModalDia({ fecha, dato, onClose }) {
+function ModalDia({ fecha, dato, config, onClose }) {
+  const [franjaGrafico, setFranjaGrafico] = useState(null)
   if (!dato) return null
   const { y, m, d } = parseDate(fecha)
   const nombreDia = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][diaSemana(y,m,d)]
   const p = pct(dato.total, dato.objTotal)
   const pColor = p >= 100 ? C.verde : p >= 80 ? C.naranja : C.rojo
+  const prod = dato.produccionData || {}
+  const incs = dato.incidenciasData || []
+  const franjas = config ? generarFranjas(config) : []
+  const objG = config?.objetivoGrande || 350
+  const objC = config?.objetivoChica  || 100
+
+  // lineas acumuladas del día
+  const lineasTotales = ['L1','L2','L3','L4'].reduce((acc, l) => {
+    const total = Object.values(prod).reduce((s,p) => s + (p.lineas?.[l]||0), 0)
+    if (total > 0) acc[l] = total
+    return acc
+  }, {})
+
+  // incidencias por categoría para ranking
+  const rankingCat = incs.filter(i=>i.grado!=='informativo').reduce((acc,i) => {
+    const k = i.categoriaNombre||'Sin categoría'
+    acc[k] = (acc[k]||0) + 1
+    return acc
+  }, {})
+  const rankingOrdenado = Object.entries(rankingCat).sort((a,b)=>b[1]-a[1])
 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 30 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '520px', maxHeight: '85vh', overflowY: 'auto', background: '#fff', borderRadius: '18px', zIndex: 31, fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-        {/* header */}
-        <div style={{ padding: '22px 24px 18px', borderBottom: `1px solid ${C.borde}`, position: 'sticky', top: 0, background: '#fff', zIndex: 2, borderRadius: '18px 18px 0 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '760px', maxHeight: '90vh', overflowY: 'auto', background: '#fff', borderRadius: '18px', zIndex: 31, fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+
+        {/* header sticky */}
+        <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${C.borde}`, position: 'sticky', top: 0, background: '#fff', zIndex: 2, borderRadius: '18px 18px 0 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <div style={{ fontSize: '18px', fontWeight: '800', color: C.texto }}>{nombreDia} {d} de {MESES[m-1]}</div>
-              <div style={{ fontSize: '12px', color: C.sub, marginTop: '2px' }}>{fecha}</div>
+              <div style={{ fontSize: '11px', color: C.sub, marginTop: '2px' }}>{fecha} · <span style={{ color: dato.estado === 'cerrado' ? C.gris : C.verde, fontWeight: '600' }}>{dato.estado}</span></div>
             </div>
             <button onClick={onClose} style={{ width: '32px', height: '32px', borderRadius: '8px', border: `1px solid ${C.borde}`, background: C.grisClaro, cursor: 'pointer', fontSize: '18px', color: C.sub }}>×</button>
           </div>
         </div>
 
         <div style={{ padding: '20px 24px' }}>
-          {/* KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px', marginBottom: '20px' }}>
+
+          {/* KPIs fila */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
             <KPICard label="Total producido" value={formatNum(dato.total)} sub={`obj ${formatNum(dato.objTotal)}`} />
-            <KPICard label="Cumplimiento" value={`${p}%`} sub={`${dato.total >= dato.objTotal ? '+' : ''}${formatNum(dato.total - dato.objTotal)} cuartos`} color={pColor} bg={p >= 100 ? C.verdeClaro : p >= 80 ? C.naranjaClaro : C.rojoClaro} />
+            <KPICard label="Cumplimiento" value={`${p}%`} sub={`${dato.total >= dato.objTotal ? '+' : ''}${formatNum(dato.total - dato.objTotal)}`} color={pColor} bg={p >= 100 ? C.verdeClaro : p >= 80 ? C.naranjaClaro : C.rojoClaro} border={p >= 100 ? C.verdeBorde : p >= 80 ? '#F5D79A' : C.rojoBorde} />
             <KPICard label="Incidencias" value={dato.incidencias} sub={dato.tiempoPerdido > 0 ? `${dato.tiempoPerdido} min perdidos` : 'Sin tiempo perdido'} color={dato.incidencias > 0 ? C.rojo : C.gris} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+              <div style={{ background: C.grisClaro, borderRadius: '10px', padding: '10px 12px' }}>
+                <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', marginBottom: '4px' }}>Grande</div>
+                <div style={{ fontSize: '16px', fontWeight: '800', color: dato.grande >= dato.objGrande ? C.verde : C.rojo }}>{formatNum(dato.grande)}</div>
+                <div style={{ fontSize: '10px', color: C.sub }}>{pct(dato.grande,dato.objGrande)}%</div>
+              </div>
+              <div style={{ background: C.grisClaro, borderRadius: '10px', padding: '10px 12px' }}>
+                <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', marginBottom: '4px' }}>Chica</div>
+                <div style={{ fontSize: '16px', fontWeight: '800', color: dato.chica >= dato.objChica ? C.verde : C.rojo }}>{formatNum(dato.chica)}</div>
+                <div style={{ fontSize: '10px', color: C.sub }}>{pct(dato.chica,dato.objChica)}%</div>
+              </div>
+            </div>
           </div>
 
-          {/* por sala */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
-            <div style={{ background: C.grisClaro, borderRadius: '12px', padding: '14px' }}>
-              <div style={{ fontSize: '10px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Sala grande</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: dato.grande >= dato.objGrande ? C.verde : C.rojo }}>{formatNum(dato.grande)}</div>
-              <div style={{ fontSize: '11px', color: C.sub }}>obj {formatNum(dato.objGrande)} · {pct(dato.grande, dato.objGrande)}%</div>
+          {/* Gráficos hora a hora */}
+          {franjas.length > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '10px' }}>Producción hora a hora</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {[{label:'Sala grande',sala:'grande',obj:objG},{label:'Sala chica',sala:'chica',obj:objC}].map(({label,sala,obj})=>(
+                  <GraficoHoraAHora key={sala}
+                    franjas={franjas} produccion={prod} objetivo={obj} config={config}
+                    sala={sala} incidencias={incs} label={label}
+                    franjaSeleccionada={franjaGrafico}
+                    onSelectFranja={f => setFranjaGrafico(prev => prev === f ? null : f)}
+                  />
+                ))}
+              </div>
             </div>
-            <div style={{ background: C.grisClaro, borderRadius: '12px', padding: '14px' }}>
-              <div style={{ fontSize: '10px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Sala chica</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: dato.chica >= dato.objChica ? C.verde : C.rojo }}>{formatNum(dato.chica)}</div>
-              <div style={{ fontSize: '11px', color: C.sub }}>obj {formatNum(dato.objChica)} · {pct(dato.chica, dato.objChica)}%</div>
-            </div>
-          </div>
+          )}
 
           {/* desglose por línea */}
-          {dato.lineas && (
+          {Object.keys(lineasTotales).length > 0 && (
             <div style={{ marginBottom: '20px' }}>
               <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '10px' }}>Producción por línea</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
-                {Object.entries(dato.lineas).map(([l, v]) => {
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Object.keys(lineasTotales).length},1fr)`, gap: '8px' }}>
+                {Object.entries(lineasTotales).map(([l,v]) => {
                   const barPct = Math.round(v / dato.grande * 100)
                   return (
-                    <div key={l} style={{ background: C.grisClaro, borderRadius: '10px', padding: '10px 12px' }}>
-                      <div style={{ fontSize: '10px', fontWeight: '700', color: C.sub, marginBottom: '6px' }}>{l}</div>
-                      <div style={{ fontSize: '18px', fontWeight: '800', color: C.azul }}>{formatNum(v)}</div>
-                      <div style={{ height: '4px', background: '#e8e8e8', borderRadius: '2px', marginTop: '6px' }}>
+                    <div key={l} style={{ background: C.azulClaro, borderRadius: '10px', padding: '12px', border: `1px solid ${C.azulBorde}` }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: C.azul, marginBottom: '6px' }}>{l}</div>
+                      <div style={{ fontSize: '22px', fontWeight: '800', color: C.azul }}>{formatNum(v)}</div>
+                      <div style={{ height: '4px', background: '#dce8f5', borderRadius: '2px', marginTop: '8px' }}>
                         <div style={{ height: '100%', width: `${barPct}%`, background: C.azul, borderRadius: '2px' }} />
                       </div>
                       <div style={{ fontSize: '10px', color: C.sub, marginTop: '3px' }}>{barPct}% del total</div>
@@ -288,9 +329,42 @@ function ModalDia({ fecha, dato, onClose }) {
             </div>
           )}
 
-          <div style={{ background: C.azulClaro, border: `1px solid ${C.azulBorde}`, borderRadius: '10px', padding: '10px 14px', fontSize: '12px', color: C.azul }}>
-            💡 Drill down completo disponible en Fase 2 — gráfico hora a hora e incidencias del turno
-          </div>
+          {/* Incidencias */}
+          {incs.length > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em' }}>Incidencias del turno</div>
+                {rankingOrdenado.length > 0 && (
+                  <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                    {rankingOrdenado.slice(0,3).map(([cat,n]) => (
+                      <span key={cat} style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: C.rojoClaro, color: C.rojo, fontWeight: '600' }}>{cat} ×{n}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ border: `1px solid ${C.borde}`, borderRadius: '10px', overflow: 'hidden' }}>
+                {incs.map((inc, i) => {
+                  const [h1,m1]=(inc.horaInicio||'0:0').split(':').map(Number)
+                  const [h2,m2]=(inc.horaFin||'0:0').split(':').map(Number)
+                  const dur = inc.horaFin ? Math.max(0,(h2*60+m2)-(h1*60+m1)) : null
+                  return (
+                    <div key={inc.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderBottom: i < incs.length-1 ? `1px solid ${C.borde}` : 'none', background: i%2===0 ? '#fff' : C.grisClaro }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: gradoColor[inc.grado]||C.gris, flexShrink: 0 }} />
+                      <span style={{ fontSize: '11px', color: C.sub, minWidth: '40px', fontVariantNumeric: 'tabular-nums' }}>{inc.horaInicio}</span>
+                      <span style={{ fontSize: '12px', fontWeight: '600', color: C.texto, flex: 1 }}>{inc.categoriaNombre}</span>
+                      {inc.sala && <span style={{ fontSize: '10px', color: C.sub }}>{inc.sala}</span>}
+                      <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: gradoBg[inc.grado]||C.grisClaro, color: gradoColor[inc.grado]||C.gris, fontWeight: '700' }}>{inc.grado}</span>
+                      {dur !== null && dur > 0 && <span style={{ fontSize: '11px', color: C.sub, minWidth: '28px', textAlign: 'right' }}>{dur}m</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {incs.length === 0 && franjas.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#ccc', fontSize: '13px' }}>Sin datos detallados para este día</div>
+          )}
         </div>
       </div>
     </>
@@ -307,6 +381,12 @@ export default function Reportes({ onVolver }) {
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
   const [vistaTabla, setVistaTabla] = useState(true)
   const [usarEjemplos, setUsarEjemplos] = useState(true)
+  const [config, setConfig] = useState(null)
+
+  // Cargar config una sola vez
+  useEffect(() => {
+    getDoc(doc(db,'config','turno')).then(s => { if (s.exists()) setConfig(s.data()) })
+  }, [])
 
   // ── Cargar datos ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -315,9 +395,44 @@ export default function Reportes({ onVolver }) {
       return
     }
     setCargando(true)
-    // TODO Fase 2: conectar Firestore real
-    // getDocs(collection(db,'turnos')).then(snap => { ... })
-    setCargando(false)
+    setDatos({})
+    const mesStr = String(mes).padStart(2,'0')
+    const prefijo = `${anio}-${mesStr}`
+    getDocs(collection(db,'turnos')).then(async snap => {
+      const turnosMes = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(t => t.fecha?.startsWith(prefijo))
+      const resultado = {}
+      await Promise.all(turnosMes.map(async turno => {
+        const [prodSnap] = await Promise.all([
+          getDocs(collection(db,'turnos',turno.id,'produccion')),
+        ])
+        const prod = {}
+        prodSnap.docs.forEach(d => { prod[d.data().franja] = d.data() })
+        const grande = Object.values(prod).reduce((s,p) => s + (p.grande||0), 0)
+        const chica  = Object.values(prod).reduce((s,p) => s + (p.chica||0), 0)
+        // incidencias: cargar para KPIs
+        const incSnap = await getDocs(collection(db,'turnos',turno.id,'incidencias'))
+        const incidencias = incSnap.docs.map(d => ({id:d.id,...d.data()})).filter(i => !i.eliminado)
+        const tiempoPerdido = incidencias.filter(i=>i.grado!=='informativo'&&i.horaInicio&&i.horaFin).reduce((s,i)=>{
+          const [h1,m1]=(i.horaInicio||'0:0').split(':').map(Number)
+          const [h2,m2]=(i.horaFin||'0:0').split(':').map(Number)
+          return s + Math.max(0,(h2*60+m2)-(h1*60+m1))
+        },0)
+        const objG = (turno.objetivoGrande||350) * 10
+        const objC = (turno.objetivoChica||100) * 10
+        resultado[turno.fecha] = {
+          fecha: turno.fecha, turnoId: turno.id, estado: turno.estado,
+          grande, chica, total: grande + chica,
+          objGrande: objG, objChica: objC, objTotal: objG + objC,
+          incidencias: incidencias.length, tiempoPerdido,
+          produccionData: prod, incidenciasData: incidencias,
+          lineas: null,
+        }
+      }))
+      setDatos(resultado)
+      setCargando(false)
+    })
   }, [mes, anio, usarEjemplos])
 
   // ── KPIs del mes ────────────────────────────────────────────────────────────
@@ -434,16 +549,12 @@ export default function Reportes({ onVolver }) {
           </div>
         )}
 
-        {/* nota fases futuras */}
-        <div style={{ marginTop: '20px', background: C.azulClaro, border: `1px solid ${C.azulBorde}`, borderRadius: '12px', padding: '14px 18px', fontSize: '12px', color: C.azul, lineHeight: 1.6 }}>
-          <strong>Fase 1 completa</strong> — KPIs del mes, calendario con colores, tabla ordenable. <br/>
-          <span style={{ opacity: .7 }}>Próximo: Fase 2 (drill down a día con gráfico hora a hora) · Fase 3 (Vista semana) · Fase 4 (Comparador)</span>
-        </div>
+
       </div>
 
       {/* modal detalle día */}
       {diaSeleccionado && (
-        <ModalDia fecha={diaSeleccionado} dato={datos[diaSeleccionado]} onClose={() => setDiaSeleccionado(null)} />
+        <ModalDia fecha={diaSeleccionado} dato={datos[diaSeleccionado]} config={config} onClose={() => setDiaSeleccionado(null)} />
       )}
     </div>
   )
