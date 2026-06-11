@@ -233,7 +233,7 @@ export default function Produccion({ turnoId, config, onClose }) {
                           <span style={{color:prod.grande>=objG?'#1D9E75':'#E24B4A',marginRight:'8px'}}>G: <strong>{prod.grande??'—'}</strong></span>
                           {tieneLineas && (
                             <span style={{fontSize:'10px',color:'#aaa'}}>
-                              {LINEAS_GRANDE.filter(l => prod.lineas[l] != null).map(l => `${l}:${prod.lineas[l]}`).join(' ')}
+                              {['L1','L2','L3','L4'].filter(l => prod.lineas[l] != null).map(l => `${l}:${prod.lineas[l]}`).join(' ')}
                             </span>
                           )}
                           <span style={{color:prod.chica>=objC?'#1D9E75':'#E24B4A',marginLeft:'8px'}}>Ch: <strong>{prod.chica??'—'}</strong></span>
