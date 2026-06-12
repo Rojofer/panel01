@@ -81,7 +81,7 @@ export default function Tablero({ user, userData, onVerInforme, onVerReportes })
     })
     getDoc(doc(db,'turnos',turnoId)).then(s => {
       setTurnoExiste(s.exists() && s.data()?.estado === 'activo')
-      if (s.exists()) {
+      if (s.exists() && s.data()?.estado === 'activo') {
         const d = s.data()
         if (d.primerIngresoGrande) setPrimerIngresoGrande(d.primerIngresoGrande)
         if (d.primerIngresoChica)  setPrimerIngresoChica(d.primerIngresoChica)
@@ -89,6 +89,10 @@ export default function Tablero({ user, userData, onVerInforme, onVerReportes })
         if (d.ultimoIngresoChica)  setUltimoIngresoChica(d.ultimoIngresoChica)
         if (d.descansosGrande) setDescGrande(d.descansosGrande)
         if (d.descansosChica)  setDescChica(d.descansosChica)
+      } else if (s.exists() && s.data()?.estado !== 'activo') {
+        setPrimerIngresoGrande(''); setPrimerIngresoChica('')
+        setUltimoIngresoGrande(''); setUltimoIngresoChica('')
+        setDescGrande([]); setDescChica([])
       }
     })
     return unsub
