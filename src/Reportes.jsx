@@ -25,6 +25,26 @@ function diaSemana(y, m, d) { return new Date(y, m-1, d).getDay() } // 0=dom
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const DIAS_CORTOS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
 
+function numeroSemana(y, m, d) {
+  const date = new Date(y, m-1, d)
+  const inicio = new Date(date.getFullYear(), 0, 1)
+  return Math.ceil(((date - inicio) / 86400000 + inicio.getDay() + 1) / 7)
+}
+
+function calcMetricasDia(d) {
+  const pi = d.primerIngresoGrande || d.primerIngresoChica
+  const ui = d.ultimoIngresoGrande || d.ultimoIngresoChica
+  if (!pi || !ui) return { tiempoNeto: null, descansos: null }
+  const [h1,m1] = pi.split(':').map(Number)
+  const [h2,m2] = ui.split(':').map(Number)
+  const dur = (h2*60+m2) - (h1*60+m1)
+  if (dur <= 0) return { tiempoNeto: null, descansos: null }
+  const descG = (d.descansosGrande||[]).reduce((s,x)=>s+Number(x.dur||0),0)
+  const descC = (d.descansosChica||[]).reduce((s,x)=>s+Number(x.dur||0),0)
+  const descansos = Math.round((descG + descC) / 2)
+  return { tiempoNeto: dur - descansos, descansos }
+}
+
 function formatNum(n) { return n?.toLocaleString('es-AR') ?? '—' }
 function pct(prod, obj) { return obj > 0 ? Math.round(prod / obj * 100) : 0 }
 
@@ -75,58 +95,70 @@ function KPICard({ label, value, sub, color, bg, border, small }) {
 }
 
 // ── Calendario ────────────────────────────────────────────────────────────────
-function Calendario({ y, m, datos, onDiaClick, diaSeleccionado }) {
+function Calendario({ y, m, datos, onDiaClick, diaSeleccionado, onSemanaClick }) {
   const total = diasEnMes(y, m)
   const primerDow = diaSemana(y, m, 1)
   const celdas = []
-
-  // blancos antes del día 1
   for (let i = 0; i < primerDow; i++) celdas.push(null)
   for (let d = 1; d <= total; d++) celdas.push(d)
+  while (celdas.length % 7 !== 0) celdas.push(null)
+
+  // agrupar en filas de 7
+  const filas = []
+  for (let i = 0; i < celdas.length; i += 7) filas.push(celdas.slice(i, i + 7))
 
   return (
     <div>
-      {/* cabecera días semana */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: '3px', marginBottom: '3px' }}>
+      {/* cabecera */}
+      <div style={{ display: 'grid', gridTemplateColumns: '30px repeat(7,1fr)', gap: '3px', marginBottom: '3px' }}>
+        <div style={{ textAlign: 'center', fontSize: '8px', fontWeight: '700', color: '#ccc', textTransform: 'uppercase', padding: '4px 0' }}>SEM</div>
         {DIAS_CORTOS.map(d => (
           <div key={d} style={{ textAlign: 'center', fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', padding: '4px 0' }}>{d}</div>
         ))}
       </div>
-      {/* grilla */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: '3px' }}>
-        {celdas.map((d, i) => {
-          if (!d) return <div key={`b${i}`} />
-          const fecha = fechaStr(y, m, d)
-          const dato  = datos[fecha]
-          const sel   = diaSeleccionado === fecha
-          const dow   = diaSemana(y, m, d)
-          const esDom = dow === 0
-
-          let bg = '#fff', borde = C.grisBorde, numColor = C.sub
-          if (esDom) { bg = '#FAFAF8'; numColor = '#ccc' }
-          else if (!dato) { bg = '#F7F7F5'; numColor = '#ccc' }
-          else {
-            const p = pct(dato.total, dato.objTotal)
-            if (p >= 100) { bg = C.verdeClaro; borde = C.verdeBorde; numColor = C.verde }
-            else if (p >= 80) { bg = C.naranjaClaro; borde = '#F5D79A'; numColor = C.naranja }
-            else { bg = C.rojoClaro; borde = C.rojoBorde; numColor = C.rojo }
-          }
-
-          return (
-            <div key={fecha} onClick={() => dato && onDiaClick(fecha)}
-              style={{ background: sel ? C.azulClaro : bg, border: `1.5px solid ${sel ? C.azul : borde}`, borderRadius: '8px', padding: '6px 4px', cursor: dato ? 'pointer' : 'default', minHeight: '52px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', transition: 'all .1s' }}>
-              <span style={{ fontSize: '11px', fontWeight: sel ? '800' : '600', color: sel ? C.azul : numColor }}>{d}</span>
-              {dato && (
-                <>
-                  <span style={{ fontSize: '10px', fontWeight: '700', color: sel ? C.azul : numColor }}>{formatNum(dato.total)}</span>
-                  <span style={{ fontSize: '8px', color: sel ? C.azul : C.sub }}>{pct(dato.total, dato.objTotal)}%</span>
-                  {dato.incidencias > 0 && <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: C.rojo, flexShrink: 0 }} />}
-                </>
-              )}
+      {/* filas con número de semana */}
+      {filas.map((fila, fi) => {
+        const primerDiaFila = fila.find(d => d != null)
+        const numSem = primerDiaFila ? numeroSemana(y, m, primerDiaFila) : null
+        return (
+          <div key={fi} style={{ display: 'grid', gridTemplateColumns: '30px repeat(7,1fr)', gap: '3px', marginBottom: '3px' }}>
+            {/* número de semana */}
+            <div onClick={() => numSem && onSemanaClick && onSemanaClick(numSem)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', color: '#fff', borderRadius: '7px', fontSize: '11px', fontWeight: '800', cursor: onSemanaClick ? 'pointer' : 'default', minHeight: '52px' }}>
+              {numSem}
             </div>
-          )
-        })}
-      </div>
+            {fila.map((d, i) => {
+              if (!d) return <div key={`b${fi}-${i}`} />
+              const fecha = fechaStr(y, m, d)
+              const dato  = datos[fecha]
+              const sel   = diaSeleccionado === fecha
+              const dow   = diaSemana(y, m, d)
+              const esDom = dow === 0
+              let bg = '#fff', borde = C.grisBorde, numColor = C.sub
+              if (esDom) { bg = '#FAFAF8'; numColor = '#ccc' }
+              else if (!dato) { bg = '#F7F7F5'; numColor = '#ccc' }
+              else {
+                const p = pct(dato.total, dato.objTotal)
+                if (p >= 100) { bg = C.verdeClaro; borde = C.verdeBorde; numColor = C.verde }
+                else if (p >= 80) { bg = C.naranjaClaro; borde = '#F5D79A'; numColor = C.naranja }
+                else { bg = C.rojoClaro; borde = C.rojoBorde; numColor = C.rojo }
+              }
+              return (
+                <div key={fecha} onClick={() => dato && onDiaClick(fecha)}
+                  style={{ background: sel ? C.azulClaro : bg, border: `1.5px solid ${sel ? C.azul : borde}`, borderRadius: '8px', padding: '6px 4px', cursor: dato ? 'pointer' : 'default', minHeight: '52px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', transition: 'all .1s' }}>
+                  <span style={{ fontSize: '11px', fontWeight: sel ? '800' : '600', color: sel ? C.azul : numColor }}>{d}</span>
+                  {dato && (
+                    <>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: sel ? C.azul : numColor }}>{formatNum(dato.total)}</span>
+                      <span style={{ fontSize: '8px', color: sel ? C.azul : C.sub }}>{pct(dato.total, dato.objTotal)}%</span>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
       {/* leyenda */}
       <div style={{ display: 'flex', gap: '12px', marginTop: '10px', flexWrap: 'wrap' }}>
         {[['#1D9E75','#EDFBF4','≥100% objetivo'],['#BA7517','#FFF8EE','80–99%'],['#E24B4A','#FEF2F2','<80%'],['#ccc','#F7F7F5','Sin datos']].map(([c,bg,t]) => (
@@ -135,6 +167,10 @@ function Calendario({ y, m, datos, onDiaClick, diaSeleccionado }) {
             <span style={{ fontSize: '10px', color: C.sub }}>{t}</span>
           </div>
         ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#111' }} />
+          <span style={{ fontSize: '10px', color: C.sub }}>Click → vista semanal</span>
+        </div>
       </div>
     </div>
   )
@@ -478,6 +514,265 @@ function NotaDia({ turnoId, notaInicial }) {
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
+// ── Vista semanal ─────────────────────────────────────────────────────────────
+function VistaSemana({ datos, anio, mes, semana, onSemanaChange, onDiaClick }) {
+  const dias = Object.values(datos)
+    .filter(d => {
+      const [y, m, dd] = d.fecha.split('-').map(Number)
+      return numeroSemana(y, m, dd) === semana
+    })
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+
+  const kpis = useMemo(() => {
+    if (!dias.length) return null
+    const totalG = dias.reduce((s,d) => s + d.grande, 0)
+    const totalC = dias.reduce((s,d) => s + d.chica, 0)
+    const total  = totalG + totalC
+    const obj    = dias.reduce((s,d) => s + d.objTotal, 0)
+    const netoTotal = dias.reduce((s,d) => s + (calcMetricasDia(d).tiempoNeto || 0), 0)
+    const eficiencia = netoTotal > 0 ? Math.round(total / (netoTotal / 60)) : null
+    const mejor = dias.reduce((b,d) => d.total > (b?.total||0) ? d : b, null)
+    const peor  = dias.reduce((w,d) => d.total < (w?.total||Infinity) ? d : w, null)
+    return { totalG, totalC, total, obj, cumplimiento: pct(total, obj), eficiencia, netoTotal, mejor, peor, diasTrabajados: dias.length }
+  }, [datos, semana])
+
+  // gráfico barras por día
+  const W = 700, H = 200, PT = 24, PB = 30, PX = 30
+  const maxVal = Math.max(...dias.map(d => Math.max(d.total, d.objTotal)), 1) * 1.15
+  const slot = dias.length > 0 ? (W - PX * 2) / dias.length : 0
+  const barW = Math.max(20, Math.min(64, slot - 24))
+
+  return (
+    <div>
+      {/* nav semana */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+        <button onClick={() => onSemanaChange(semana - 1)} style={{ width: '28px', height: '28px', borderRadius: '7px', border: `1px solid ${C.borde}`, background: '#fff', cursor: 'pointer', fontSize: '14px', color: C.sub }}>‹</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', color: '#fff', borderRadius: '8px', padding: '4px 10px', lineHeight: 1 }}>
+            <span style={{ fontSize: '7px', fontWeight: '600', letterSpacing: '.1em', opacity: .6 }}>SEM</span>
+            <span style={{ fontSize: '18px', fontWeight: '800' }}>{semana}</span>
+          </div>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: C.sub }}>{MESES[mes-1]} {anio}</span>
+        </div>
+        <button onClick={() => onSemanaChange(semana + 1)} style={{ width: '28px', height: '28px', borderRadius: '7px', border: `1px solid ${C.borde}`, background: '#fff', cursor: 'pointer', fontSize: '14px', color: C.sub }}>›</button>
+      </div>
+
+      {!kpis && <div style={{ textAlign: 'center', padding: '50px', color: '#ccc', fontSize: '13px' }}>Sin datos para la semana {semana}</div>}
+
+      {kpis && (
+        <>
+          {/* KPIs semana */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+            {[
+              ['Total semana', formatNum(kpis.total), `de ${formatNum(kpis.obj)}`, kpis.cumplimiento >= 100 ? C.verde : kpis.cumplimiento >= 80 ? C.naranja : C.rojo, `${kpis.cumplimiento}%`],
+              ['Sala grande', formatNum(kpis.totalG), null, C.texto, null],
+              ['Sala chica', formatNum(kpis.totalC), null, C.texto, null],
+              ['Eficiencia', kpis.eficiencia ? `${kpis.eficiencia}/h` : '—', kpis.netoTotal > 0 ? `${Math.round(kpis.netoTotal/60)}h netas` : null, C.azul, null],
+              ['Días trabajados', kpis.diasTrabajados, null, C.texto, null],
+              ['Mejor día', kpis.mejor ? formatNum(kpis.mejor.total) : '—', kpis.mejor?.fecha.slice(8), C.verde, null],
+            ].map(([label, value, sub, color, badge]) => (
+              <div key={label} style={{ background: C.grisClaro, borderRadius: '10px', padding: '8px 14px', border: `1px solid ${C.grisBorde}` }}>
+                <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '3px' }}>{label}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                  <span style={{ fontSize: '19px', fontWeight: '800', color, letterSpacing: '-0.5px' }}>{value}</span>
+                  {badge && <span style={{ fontSize: '11px', fontWeight: '700', color }}>{badge}</span>}
+                  {sub && <span style={{ fontSize: '10px', color: C.sub }}>{sub}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* gráfico barras por día */}
+          <div style={{ background: '#fff', borderRadius: '12px', border: `1px solid ${C.borde}`, padding: '16px 18px', marginBottom: '20px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '10px' }}>Producción por día</div>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+              {dias.map((d, i) => {
+                const x = PX + i * slot + (slot - barW) / 2
+                const xc = x + barW / 2
+                const hG = Math.round((d.grande / maxVal) * (H - PT - PB))
+                const hC = Math.round((d.chica  / maxVal) * (H - PT - PB))
+                const yObj = PT + (H - PT - PB) - Math.round((d.objTotal / maxVal) * (H - PT - PB))
+                const p = pct(d.total, d.objTotal)
+                const color = p >= 100 ? '#1D9E75' : p >= 80 ? '#BA7517' : '#E24B4A'
+                const [yy,mm,dd] = d.fecha.split('-').map(Number)
+                const nombreDia = DIAS_CORTOS[diaSemana(yy,mm,dd)]
+                return (
+                  <g key={d.fecha} onClick={() => onDiaClick(d.fecha)} style={{ cursor: 'pointer' }}>
+                    {/* barra apilada: chica arriba de grande */}
+                    <rect x={x} y={H-PB-hG} width={barW} height={hG} fill={color} rx="3" opacity=".9" />
+                    <rect x={x} y={H-PB-hG-hC} width={barW} height={hC} fill={color} rx="3" opacity=".45" />
+                    {/* línea objetivo */}
+                    <line x1={x-4} y1={yObj} x2={x+barW+4} y2={yObj} stroke="#C8B89A" strokeWidth="1.3" strokeDasharray="4 2" />
+                    <text x={xc} y={H-PB-hG-hC-6} textAnchor="middle" fontSize="11" fontWeight="700" fill={color} fontFamily="system-ui">{formatNum(d.total)}</text>
+                    <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="10" fontWeight="700" fill="#555" fontFamily="system-ui">{nombreDia} {dd}</text>
+                    <text x={xc} y={H-PB+26} textAnchor="middle" fontSize="9" fontWeight="600" fill={color} fontFamily="system-ui">{p}%</text>
+                  </g>
+                )
+              })}
+            </svg>
+            <div style={{ display: 'flex', gap: '14px', marginTop: '6px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#1D9E75', opacity: .9 }} />Grande</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#1D9E75', opacity: .45 }} />Chica</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '14px', height: '0', borderTop: '1.5px dashed #C8B89A' }} />Objetivo</span>
+            </div>
+          </div>
+
+          {/* tabla de la semana */}
+          <div style={{ background: '#fff', borderRadius: '12px', border: `1px solid ${C.borde}`, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.borde}`, fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+              Días de la semana {semana}
+            </div>
+            <TablaDias datos={Object.fromEntries(dias.map(d => [d.fecha, d]))} onDiaClick={onDiaClick} />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Resumen mensual gerencial ─────────────────────────────────────────────────
+function ResumenMensual({ datos, anio, mes, onSemanaClick }) {
+  const lista = Object.values(datos)
+
+  const resumen = useMemo(() => {
+    if (!lista.length) return null
+    const totalG = lista.reduce((s,d) => s + d.grande, 0)
+    const totalC = lista.reduce((s,d) => s + d.chica, 0)
+    const total  = totalG + totalC
+    const obj    = lista.reduce((s,d) => s + d.objTotal, 0)
+    const netoTotal = lista.reduce((s,d) => s + (calcMetricasDia(d).tiempoNeto || 0), 0)
+    const eficiencia = netoTotal > 0 ? Math.round(total / (netoTotal / 60)) : null
+    const bajoObjetivo = lista.filter(d => pct(d.total, d.objTotal) < 100).length
+
+    // eficiencia por línea
+    const lineasEf = {}
+    ;['L1','L2','L3','L4'].forEach(l => {
+      const t = lista.reduce((s,d) => s + Object.values(d.produccionData||{}).reduce((ss,p)=>ss+(p.lineas?.[l]||0),0), 0)
+      if (t > 0) lineasEf[l] = t
+    })
+
+    // agrupar por semana
+    const porSemana = {}
+    lista.forEach(d => {
+      const [y, m, dd] = d.fecha.split('-').map(Number)
+      const sem = numeroSemana(y, m, dd)
+      if (!porSemana[sem]) porSemana[sem] = { semana: sem, dias: 0, grande: 0, chica: 0, total: 0, obj: 0, neto: 0 }
+      const ps = porSemana[sem]
+      ps.dias++; ps.grande += d.grande; ps.chica += d.chica; ps.total += d.total; ps.obj += d.objTotal
+      ps.neto += calcMetricasDia(d).tiempoNeto || 0
+    })
+    const semanas = Object.values(porSemana).sort((a,b) => a.semana - b.semana).map(s => ({
+      ...s,
+      cumplimiento: pct(s.total, s.obj),
+      eficiencia: s.neto > 0 ? Math.round(s.total / (s.neto / 60)) : null,
+    }))
+    const mejorSemana = semanas.reduce((b,s) => s.total > (b?.total||0) ? s : b, null)
+
+    return { totalG, totalC, total, obj, cumplimiento: pct(total, obj), eficiencia, netoTotal, bajoObjetivo, diasTrabajados: lista.length, semanas, mejorSemana, lineasEf, aporteG: total > 0 ? Math.round(totalG/total*100) : 0 }
+  }, [datos])
+
+  if (!resumen) return <div style={{ textAlign: 'center', padding: '50px', color: '#ccc' }}>Sin datos para el resumen</div>
+
+  // tendencia semanal: gráfico de barras
+  const W = 700, H = 180, PT = 24, PB = 28, PX = 40
+  const maxSem = Math.max(...resumen.semanas.map(s => Math.max(s.total, s.obj)), 1) * 1.15
+  const slotS = resumen.semanas.length > 0 ? (W - PX*2) / resumen.semanas.length : 0
+  const barWS = Math.max(30, Math.min(80, slotS - 30))
+
+  return (
+    <div className="print-area">
+      {/* título para impresión */}
+      <div className="print-only" style={{ display: 'none' }}>
+        <h1 style={{ fontSize: '20px', margin: '0 0 4px' }}>Resumen mensual — {MESES[mes-1]} {anio}</h1>
+        <p style={{ fontSize: '11px', color: '#888', margin: '0 0 16px' }}>Panel de Control · generado {new Date().toLocaleDateString('es-AR')}</p>
+      </div>
+
+      {/* bloque ejecutivo */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '12px' }}>
+        <KPICard label="Total producido" value={formatNum(resumen.total)} sub={`de ${formatNum(resumen.obj)} objetivo`} />
+        <KPICard label="Cumplimiento" value={`${resumen.cumplimiento}%`} sub={`${resumen.total >= resumen.obj ? '+' : ''}${formatNum(resumen.total - resumen.obj)} cuartos`} color={resumen.cumplimiento >= 100 ? C.verde : resumen.cumplimiento >= 80 ? C.naranja : C.rojo} bg={resumen.cumplimiento >= 100 ? C.verdeClaro : resumen.cumplimiento >= 80 ? C.naranjaClaro : C.rojoClaro} />
+        <KPICard label="Eficiencia" value={resumen.eficiencia ? `${resumen.eficiencia}/h` : '—'} sub={resumen.netoTotal > 0 ? `${Math.round(resumen.netoTotal/60)}h productivas netas` : 'sin datos de ingresos'} color={C.azul} bg={C.azulClaro} border={C.azulBorde} />
+        <KPICard label="Días" value={resumen.diasTrabajados} sub={`${resumen.bajoObjetivo} bajo objetivo`} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
+        <KPICard label="Sala grande" value={formatNum(resumen.totalG)} sub={`${resumen.aporteG}% del total`} small />
+        <KPICard label="Sala chica" value={formatNum(resumen.totalC)} sub={`${100-resumen.aporteG}% del total`} small />
+        <KPICard label="Mejor semana" value={resumen.mejorSemana ? `SEM ${resumen.mejorSemana.semana}` : '—'} sub={resumen.mejorSemana ? formatNum(resumen.mejorSemana.total) : null} color={C.verde} bg={C.verdeClaro} border={C.verdeBorde} small />
+        <div style={{ background: C.grisClaro, borderRadius: '12px', border: `1px solid ${C.grisBorde}`, padding: '12px 16px' }}>
+          <div style={{ fontSize: '10px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '6px' }}>Producción por línea</div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {Object.entries(resumen.lineasEf).map(([l,v]) => (
+              <span key={l} style={{ fontSize: '11px', fontWeight: '700', color: C.azul }}>{l}: <span style={{ color: C.texto }}>{formatNum(v)}</span></span>
+            ))}
+            {Object.keys(resumen.lineasEf).length === 0 && <span style={{ fontSize: '11px', color: '#ccc' }}>Sin datos por línea</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* tendencia semanal */}
+      <div style={{ background: '#fff', borderRadius: '12px', border: `1px solid ${C.borde}`, padding: '16px 18px', marginBottom: '20px' }}>
+        <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '10px' }}>Tendencia semanal</div>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+          {resumen.semanas.map((s, i) => {
+            const x = PX + i * slotS + (slotS - barWS) / 2
+            const xc = x + barWS / 2
+            const hT = Math.round((s.total / maxSem) * (H - PT - PB))
+            const yObj = PT + (H - PT - PB) - Math.round((s.obj / maxSem) * (H - PT - PB))
+            const color = s.cumplimiento >= 100 ? '#1D9E75' : s.cumplimiento >= 80 ? '#BA7517' : '#E24B4A'
+            return (
+              <g key={s.semana} onClick={() => onSemanaClick && onSemanaClick(s.semana)} style={{ cursor: 'pointer' }}>
+                <rect x={x} y={H-PB-hT} width={barWS} height={hT} fill={color} rx="4" opacity=".88" />
+                <line x1={x-5} y1={yObj} x2={x+barWS+5} y2={yObj} stroke="#C8B89A" strokeWidth="1.3" strokeDasharray="4 2" />
+                <text x={xc} y={H-PB-hT-6} textAnchor="middle" fontSize="11" fontWeight="700" fill={color} fontFamily="system-ui">{formatNum(s.total)}</text>
+                <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="10" fontWeight="700" fill="#555" fontFamily="system-ui">SEM {s.semana}</text>
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+
+      {/* tabla de semanas */}
+      <div style={{ background: '#fff', borderRadius: '12px', border: `1px solid ${C.borde}`, overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.borde}`, fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+          Semanas del mes <span style={{ fontSize: '10px', color: '#ccc', fontWeight: '400', textTransform: 'none' }}>· click para detalle</span>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+          <thead>
+            <tr style={{ borderBottom: `2px solid ${C.borde}` }}>
+              {['Semana','Días','Grande','Chica','Total','% obj','Eficiencia'].map((h,i) => (
+                <th key={h} style={{ padding: '8px 12px', textAlign: i === 0 ? 'left' : 'right', fontSize: '10px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {resumen.semanas.map((s, i) => {
+              const color = s.cumplimiento >= 100 ? C.verde : s.cumplimiento >= 80 ? C.naranja : C.rojo
+              const bg = s.cumplimiento >= 100 ? C.verdeClaro : s.cumplimiento >= 80 ? C.naranjaClaro : C.rojoClaro
+              return (
+                <tr key={s.semana} onClick={() => onSemanaClick && onSemanaClick(s.semana)}
+                  style={{ borderBottom: `1px solid ${C.borde}`, background: i % 2 === 0 ? '#fff' : '#FAFAF8', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.azulClaro}
+                  onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#FAFAF8'}>
+                  <td style={{ padding: '9px 12px', fontWeight: '800', color: C.texto }}>SEM {s.semana}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'right', color: C.sub }}>{s.dias}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: '600' }}>{formatNum(s.grande)}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: '600' }}>{formatNum(s.chica)}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: '800' }}>{formatNum(s.total)}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '20px', background: bg, color }}>{s.cumplimiento}%</span>
+                  </td>
+                  <td style={{ padding: '9px 12px', textAlign: 'right', color: C.azul, fontWeight: '600' }}>{s.eficiencia ? `${s.eficiencia}/h` : '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function Reportes({ onVolver }) {
   const hoy = new Date()
   const [mes, setMes]  = useState(hoy.getMonth() + 1)
@@ -488,6 +783,8 @@ export default function Reportes({ onVolver }) {
   const [vistaTabla, setVistaTabla] = useState(true)
   const [usarEjemplos, setUsarEjemplos] = useState(true)
   const [config, setConfig] = useState(null)
+  const [vista, setVista] = useState('mes') // 'mes' | 'semana' | 'resumen'
+  const [semanaSel, setSemanaSel] = useState(numeroSemana(hoy.getFullYear(), hoy.getMonth()+1, hoy.getDate()))
 
   // Cargar config una sola vez
   useEffect(() => {
@@ -578,18 +875,42 @@ export default function Reportes({ onVolver }) {
 
   return (
     <div style={{ fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', background: C.fondo, minHeight: '100vh' }}>
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .print-area, .print-area * { visibility: visible; }
+          .print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 20px !important; }
+          .print-only { display: block !important; }
+          button { display: none !important; }
+        }
+      `}</style>
 
       {/* header */}
       <div style={{ background: '#fff', borderBottom: `1px solid ${C.borde}`, padding: '0 24px', height: '54px', display: 'flex', alignItems: 'center', gap: '16px', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <button onClick={onVolver} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: `1px solid ${C.borde}`, background: C.grisClaro, cursor: 'pointer', color: C.sub }}>← Volver</button>
         <div style={{ fontSize: '16px', fontWeight: '800', color: C.texto, letterSpacing: '-0.3px' }}>Reportes</div>
 
+        {/* tabs */}
+        <div style={{ display: 'flex', background: C.grisClaro, borderRadius: '8px', padding: '2px', border: `1px solid ${C.borde}` }}>
+          {[['mes','Mes'],['semana','Semana'],['resumen','Resumen']].map(([v,label]) => (
+            <button key={v} onClick={() => setVista(v)}
+              style={{ padding: '4px 14px', borderRadius: '6px', border: 'none', background: vista === v ? '#fff' : 'transparent', cursor: 'pointer', fontSize: '12px', color: vista === v ? C.texto : C.sub, fontWeight: vista === v ? '700' : '400', boxShadow: vista === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* nav mes */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <button onClick={() => navMes(-1)} style={{ width: '26px', height: '26px', borderRadius: '6px', border: `1px solid ${C.borde}`, background: '#fff', cursor: 'pointer', fontSize: '13px', color: C.sub }}>‹</button>
           <span style={{ fontSize: '14px', fontWeight: '700', color: C.texto, minWidth: '130px', textAlign: 'center' }}>{MESES[mes-1]} {anio}</span>
           <button onClick={() => navMes(1)} style={{ width: '26px', height: '26px', borderRadius: '6px', border: `1px solid ${C.borde}`, background: '#fff', cursor: 'pointer', fontSize: '13px', color: C.sub }}>›</button>
         </div>
+
+        {/* export PDF */}
+        <button onClick={() => window.print()} style={{ fontSize: '11px', padding: '4px 12px', borderRadius: '7px', border: `1px solid ${C.azulBorde}`, background: C.azulClaro, cursor: 'pointer', color: C.azul, fontWeight: '600' }}>
+          🖨 Exportar PDF
+        </button>
 
         {/* toggle datos ejemplo/real */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -610,7 +931,19 @@ export default function Reportes({ onVolver }) {
         </div>
       </div>
 
-      <div style={{ padding: '20px 24px', maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ padding: '20px 24px', maxWidth: '1200px', margin: '0 auto' }} className="print-area">
+
+        {vista === 'semana' && (
+          <VistaSemana datos={datos} anio={anio} mes={mes} semana={semanaSel}
+            onSemanaChange={s => setSemanaSel(s)} onDiaClick={setDiaSeleccionado} />
+        )}
+
+        {vista === 'resumen' && (
+          <ResumenMensual datos={datos} anio={anio} mes={mes}
+            onSemanaClick={s => { setSemanaSel(s); setVista('semana') }} />
+        )}
+
+        {vista === 'mes' && (<>
 
         {/* KPIs del mes */}
         {kpis && (
@@ -645,7 +978,7 @@ export default function Reportes({ onVolver }) {
             {!vistaTabla && (
               <div style={{ background: '#fff', borderRadius: '14px', border: `1px solid ${C.borde}`, padding: '18px 20px' }}>
                 <div style={{ fontSize: '12px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '14px' }}>Calendario</div>
-                <Calendario y={anio} m={mes} datos={datos} onDiaClick={setDiaSeleccionado} diaSeleccionado={diaSeleccionado} />
+                <Calendario y={anio} m={mes} datos={datos} onDiaClick={setDiaSeleccionado} diaSeleccionado={diaSeleccionado} onSemanaClick={s => { setSemanaSel(s); setVista('semana') }} />
               </div>
             )}
 
@@ -662,6 +995,7 @@ export default function Reportes({ onVolver }) {
           </div>
         )}
 
+        </>)}
 
       </div>
 
