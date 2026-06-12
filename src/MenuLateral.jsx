@@ -10,8 +10,8 @@ export default function MenuLateral({ open, onClose, userData, turnoExiste, onCe
         <div style={{ flex: 1, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {turnoExiste && (
             <button onClick={() => { onProduccion(); onClose() }} style={btnStyle('#111')}>
-              📦 Producción
-            </button>
+            📦 Producción
+          </button>
           )}
           <button onClick={() => { onHistorial(); onClose() }} style={btnStyle('#111')}>
             📋 Historial
