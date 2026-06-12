@@ -54,7 +54,7 @@ export default function Tablero({ user, userData, onVerInforme, onVerReportes })
     const idManana = fechaStr.replace(/-/g,'') + '_manana'
     getDocs(collection(db,'turnos')).then(snap => {
       const todos = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      const turnosHoy = todos.filter(t => t.fecha === fechaStr).sort((a,b) => b.id.localeCompare(a.id))
+      const turnosHoy = todos.filter(t => t.fecha === fechaStr && t.estado === 'activo').sort((a,b) => b.id.localeCompare(a.id))
       const turnosAyer = todos.filter(t => t.fecha === fechaAyer && t.estado === 'activo').sort((a,b) => b.id.localeCompare(a.id))
       setTurnoId((turnosHoy[0] || turnosAyer[0])?.id || idManana)
     })
