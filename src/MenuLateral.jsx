@@ -22,11 +22,6 @@ export default function MenuLateral({ open, onClose, userData, turnoExiste, onCe
             </button>
           )}
           {userData?.rol === 'owner' && (
-            <button onClick={() => { onInforme(); onClose() }} style={btnStyle('#111')}>
-              📊 Informes
-            </button>
-          )}
-          {userData?.rol === 'owner' && (
             <button onClick={() => { onReportes(); onClose() }} style={btnStyle('#111')}>
               🗒️ Reportes
             </button>
