@@ -80,7 +80,7 @@ export default function Tablero({ user, userData, onVerInforme, onVerReportes })
       setProduccion(prod)
     })
     getDoc(doc(db,'turnos',turnoId)).then(s => {
-      setTurnoExiste(s.exists())
+      setTurnoExiste(s.exists() && s.data()?.estado === 'activo')
       if (s.exists()) {
         const d = s.data()
         if (d.primerIngresoGrande) setPrimerIngresoGrande(d.primerIngresoGrande)
