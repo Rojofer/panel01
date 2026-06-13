@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { collection, doc, getDoc, getDocs, query, orderBy, updateDoc } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, orderBy, updateDoc, setDoc } from 'firebase/firestore'
 import GraficoHoraAHora, { getDescansoParcial, generarFranjas } from './GraficoHoraAHora'
 import { db } from './firebase'
 
@@ -79,6 +79,7 @@ function generarEjemplos(y, m) {
         L4: Math.round(grande * 0.22),
       },
       notaDia: Math.random() < 0.2 ? 'Nota de ejemplo: revisión de mantenimiento en L3 durante el turno.' : '',
+      cabezas: Math.round(600 + Math.random() * 400), // ejemplo
     }
   }
   return result
@@ -247,10 +248,34 @@ function GraficoBarrasMes({ y, m, datos, feriados = [], onDiaClick }) {
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: C.naranja }} />80–99%</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: C.rojo }} />&lt;80%</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '14px', height: '0', borderTop: '1.5px dashed #C8B89A' }} />Objetivo {!objVisible && objDia > 0 ? `(${formatNum(objDia)}, fuera de escala)` : ''}</span>
+          {dias.some(x => x.dato?.cabezas) && <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '14px', height: '0', borderTop: '2px solid #6B48FF', opacity: .75 }} />Cabezas faenadas</span>}
         </div>
       </div>
-      {/* FUTURO: cabezas faenadas por día — segundo eje Y a la derecha (línea sobre las barras).
-          Cuando exista x.dato.cabezas, dibujar polyline escalada con maxCabezas y eje derecho. */}
+      {/* Línea de cabezas faenadas — segundo eje Y derecho */}
+      {(() => {
+        const diasConCabezas = dias.filter(x => x.dato?.cabezas)
+        if (diasConCabezas.length < 2) return null
+        const maxCabezas = Math.max(...diasConCabezas.map(x => x.dato.cabezas))
+        const puntos = dias.map((x, i) => {
+          if (!x.dato?.cabezas) return null
+          const px = PX + i * slot + slot / 2
+          const py = PT + chartH - Math.round((x.dato.cabezas / maxCabezas) * chartH * 0.85)
+          return { px, py, v: x.dato.cabezas, fecha: x.fecha }
+        }).filter(Boolean)
+        const polyline = puntos.map(p => `${p.px},${p.py}`).join(' ')
+        const yMaxCab = PT + chartH - Math.round(chartH * 0.85)
+        const yMinCab = PT + chartH
+        return (
+          <div style={{ position: 'relative', marginBottom: '-4px' }}>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+              <polyline points={polyline} fill="none" stroke="#6B48FF" strokeWidth="2" strokeDasharray="none" opacity=".75" />
+              {puntos.map(p => <circle key={p.fecha} cx={p.px} cy={p.py} r="3" fill="#6B48FF" opacity=".85" />)}
+              <text x={W-PX+2} y={yMaxCab+4} fontSize="9" fill="#6B48FF" fontWeight="700" fontFamily="system-ui">{formatNum(maxCabezas)}</text>
+              <text x={W-PX+2} y={yMinCab} fontSize="9" fill="#6B48FF" fontWeight="400" fontFamily="system-ui">cab.</text>
+            </svg>
+          </div>
+        )
+      })()}
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
         {/* línea de objetivo — solo si entra en la escala */}
         {yObj != null && (
@@ -581,6 +606,20 @@ function ModalDia({ fecha, dato, config, onClose }) {
 
           {/* KPIs fila — compactos */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            {/* cabezas faenadas + ratio */}
+            {dato.cabezas && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ background: '#F0F8FF', borderRadius: '10px', padding: '8px 14px', border: '1px solid #B5D4F4' }}>
+                  <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '3px' }}>Cabezas faenadas</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: C.azul, letterSpacing: '-0.5px' }}>{formatNum(dato.cabezas)}</div>
+                </div>
+                <div style={{ background: '#F0F8FF', borderRadius: '10px', padding: '8px 14px', border: '1px solid #B5D4F4' }}>
+                  <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '3px' }}>Cuartos / cabeza</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: C.azul, letterSpacing: '-0.5px' }}>{(dato.total / dato.cabezas).toFixed(1)}</div>
+                  <div style={{ fontSize: '10px', color: C.sub, marginTop: '1px' }}>rendimiento desposte</div>
+                </div>
+              </div>
+            )}
             {/* total */}
             <div style={{ background: C.grisClaro, borderRadius: '10px', padding: '8px 14px', border: `1px solid ${C.grisBorde}` }}>
               <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '3px' }}>Total producido</div>
@@ -698,11 +737,46 @@ function ModalDia({ fecha, dato, config, onClose }) {
             <div style={{ textAlign: 'center', padding: '20px', color: '#ccc', fontSize: '13px' }}>Sin datos detallados para este día</div>
           )}
 
+          {/* Cabezas faenadas editable */}
+          <CabezasEditor fecha={fecha} cabezasInicial={dato.cabezas} />
+
           {/* Nota del día */}
           <NotaDia turnoId={dato.turnoId} notaInicial={dato.notaDia} />
         </div>
       </div>
     </>
+  )
+}
+
+function CabezasEditor({ fecha, cabezasInicial }) {
+  const [cabezas, setCabezas] = useState(cabezasInicial ? String(cabezasInicial) : '')
+  const [guardando, setGuardando] = useState(false)
+  const [guardado, setGuardado] = useState(false)
+
+  async function guardar() {
+    if (!fecha || cabezas === '') return
+    setGuardando(true)
+    await setDoc(doc(db,'produccion-diaria',fecha), { cabezas: Number(cabezas) }, { merge: true })
+    setGuardando(false); setGuardado(true); setTimeout(() => setGuardado(false), 2000)
+  }
+
+  return (
+    <div style={{ marginBottom: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em' }}>Cabezas faenadas</div>
+        {guardado && <span style={{ fontSize: '10px', color: C.verde, fontWeight: '600' }}>✓ Guardado</span>}
+      </div>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <input type="number" value={cabezas} placeholder="ej: 1250"
+          onChange={e => setCabezas(e.target.value)}
+          onBlur={guardar}
+          style={{ flex: 1, fontSize: '16px', fontWeight: '700', borderRadius: '10px', border: `1.5px solid ${cabezas ? C.azul : C.borde}`, padding: '8px 12px', textAlign: 'center', color: C.azul, background: cabezas ? C.azulClaro : '#fafafa' }} />
+        <button onClick={guardar} disabled={!cabezas || guardando}
+          style={{ padding: '8px 16px', borderRadius: '10px', border: 'none', background: guardado ? C.verde : cabezas ? C.azul : '#e8e8e8', color: cabezas ? '#fff' : '#bbb', fontWeight: '700', fontSize: '12px', cursor: cabezas ? 'pointer' : 'default' }}>
+          {guardado ? '✓' : guardando ? '...' : 'Guardar'}
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -1420,6 +1494,18 @@ export default function Reportes({ onVolver }) {
           notaDia: turno.notaDia || '',
         }
       }))
+      // cargar cabezas faenadas del mes
+      const mesStr2 = String(mes).padStart(2,'0')
+      const cabezasSnap = await getDocs(collection(db,'produccion-diaria'))
+      const cabezasMes = {}
+      cabezasSnap.docs.forEach(d => {
+        if (d.id.startsWith(`${anio}-${mesStr2}`)) cabezasMes[d.id] = d.data().cabezas || null
+      })
+      // inyectar cabezas en resultado
+      Object.keys(resultado).forEach(fecha => {
+        resultado[fecha].cabezas = cabezasMes[fecha] || null
+      })
+
       setDatos(resultado)
       setCargando(false)
     })
