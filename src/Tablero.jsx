@@ -11,7 +11,7 @@ const gradoColor = { critico: '#E24B4A', moderado: '#BA7517', leve: '#185FA5', i
 const gradoBg = { critico: '#fef2f2', moderado: '#fff8ee', leve: '#f0f6ff', informativo: '#edfbf4' }
 const gradoLabel = { critico: 'Crítica', moderado: 'Moderada', leve: 'Leve', informativo: 'Info' }
 
-export default function Tablero({ user, userData, onVerInforme, onVerReportes }) {
+export default function Tablero({ user, userData, onVerReportes }) {
   const [incidencias, setIncidencias] = useState([])
   const [config, setConfig] = useState(null)
   const [turnoId, setTurnoId] = useState('')
