@@ -214,8 +214,19 @@ function Calendario({ y, m, datos, feriados = [], onDiaClick, diaSeleccionado, o
 function TablaDias({ datos, onDiaClick }) {
   const [sortCol, setSortCol] = useState('fecha')
   const [sortDir, setSortDir] = useState('desc')
+  const [seleccionados, setSeleccionados] = useState(new Set())
+
+  function toggleSel(fecha, e) {
+    e.stopPropagation()
+    setSeleccionados(prev => {
+      const next = new Set(prev)
+      next.has(fecha) ? next.delete(fecha) : next.add(fecha)
+      return next
+    })
+  }
 
   const cols = [
+    { key: '_sel',       label: '',             w: '36px' },
     { key: 'fecha',      label: 'Fecha',        w: '90px' },
     { key: 'dia',        label: 'Día',          w: '44px' },
     { key: 'grande',     label: 'Grande',       w: '72px', num: true },
@@ -283,7 +294,13 @@ function TablaDias({ datos, onDiaClick }) {
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif' }}>
         <thead>
           <tr style={{ borderBottom: `2px solid ${C.borde}` }}>
-            {cols.map(c => (
+            <th style={{ padding: '8px 10px', width: '36px' }}>
+              <input type="checkbox"
+                checked={seleccionados.size === filas.length && filas.length > 0}
+                onChange={() => setSeleccionados(prev => prev.size === filas.length ? new Set() : new Set(filas.map(f => f.fecha)))}
+                style={{ cursor: 'pointer', width: '14px', height: '14px' }} />
+            </th>
+            {cols.filter(c => c.key !== '_sel').map(c => (
               <th key={c.key} onClick={() => toggleSort(c.key)}
                 style={{ padding: '8px 12px', textAlign: c.num ? 'right' : 'left', fontSize: '10px', fontWeight: '700', color: sortCol === c.key ? C.azul : C.sub, textTransform: 'uppercase', letterSpacing: '.06em', cursor: 'pointer', whiteSpace: 'nowrap', width: c.w, userSelect: 'none' }}>
                 {c.label} {chevron(c.key)}
@@ -297,28 +314,72 @@ function TablaDias({ datos, onDiaClick }) {
             const rowColor = p >= 100 ? C.verde : p >= 80 ? C.naranja : C.rojo
             const rowBg = p >= 100 ? C.verdeClaro : p >= 80 ? C.naranjaClaro : C.rojoClaro
             return (
-              <tr key={f.fecha} onClick={() => onDiaClick(f.fecha)}
-                style={{ borderBottom: `1px solid ${C.borde}`, background: i % 2 === 0 ? '#fff' : '#FAFAF8', cursor: 'pointer' }}
-                onMouseEnter={e => e.currentTarget.style.background = C.azulClaro}
-                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#FAFAF8'}>
-                <td style={{ padding: '8px 10px', fontWeight: '600', color: C.texto, whiteSpace: 'nowrap' }}>{f.fecha}</td>
-                <td style={{ padding: '8px 6px', color: C.sub, fontSize: '11px' }}>{f.dia}</td>
-                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: f.grande >= f.objGrande ? C.verde : C.rojo }}>{formatNum(f.grande)}</td>
-                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: f.chica  >= f.objChica  ? C.verde : C.rojo }}>{formatNum(f.chica)}</td>
-                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: C.texto }}>{formatNum(f.total)}</td>
-                <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+              <tr key={f.fecha}
+                style={{ borderBottom: `1px solid ${C.borde}`, background: seleccionados.has(f.fecha) ? C.azulClaro : i % 2 === 0 ? '#fff' : '#FAFAF8', cursor: 'pointer' }}
+                onMouseEnter={e => { if (!seleccionados.has(f.fecha)) e.currentTarget.style.background = '#F0F4FF' }}
+                onMouseLeave={e => { if (!seleccionados.has(f.fecha)) e.currentTarget.style.background = seleccionados.has(f.fecha) ? C.azulClaro : i % 2 === 0 ? '#fff' : '#FAFAF8' }}>
+                <td style={{ padding: '8px 10px' }} onClick={e => toggleSel(f.fecha, e)}>
+                  <input type="checkbox" checked={seleccionados.has(f.fecha)} readOnly style={{ cursor: 'pointer', width: '14px', height: '14px' }} />
+                </td>
+                <td style={{ padding: '8px 10px', fontWeight: '600', color: C.texto, whiteSpace: 'nowrap' }} onClick={() => onDiaClick(f.fecha)}>{f.fecha}</td>
+                <td style={{ padding: '8px 6px', color: C.sub, fontSize: '11px' }} onClick={() => onDiaClick(f.fecha)}>{f.dia}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: f.grande >= f.objGrande ? C.verde : C.rojo }} onClick={() => onDiaClick(f.fecha)}>{formatNum(f.grande)}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '600', color: f.chica  >= f.objChica  ? C.verde : C.rojo }} onClick={() => onDiaClick(f.fecha)}>{formatNum(f.chica)}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: '800', color: C.texto }} onClick={() => onDiaClick(f.fecha)}>{formatNum(f.total)}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right' }} onClick={() => onDiaClick(f.fecha)}>
                   <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', borderRadius: '20px', background: rowBg, color: rowColor }}>{p}%</span>
                 </td>
-                <td style={{ padding: '8px 10px', textAlign: 'right', color: f.tiempoNeto ? C.texto : C.sub, fontWeight: '500' }}>{f.tiempoNeto ? `${f.tiempoNeto}m` : '—'}</td>
-                <td style={{ padding: '8px 10px', textAlign: 'right', color: f.descansos > 0 ? C.naranja : C.sub }}>{f.descansos > 0 ? `${f.descansos}m` : '—'}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', color: f.tiempoNeto ? C.texto : C.sub, fontWeight: '500' }} onClick={() => onDiaClick(f.fecha)}>{f.tiempoNeto ? `${f.tiempoNeto}m` : '—'}</td>
+                <td style={{ padding: '8px 10px', textAlign: 'right', color: f.descansos > 0 ? C.naranja : C.sub }} onClick={() => onDiaClick(f.fecha)}>{f.descansos > 0 ? `${f.descansos}m` : '—'}</td>
                 {['L1','L2','L3','L4','L5'].map(l => (
-                  <td key={l} style={{ padding: '8px 10px', textAlign: 'right', color: f[l] ? (l==='L5'?C.naranja:C.azul) : '#ddd', fontSize: '11px', fontWeight: f[l] ? '600' : '400' }}>{f[l] ? formatNum(f[l]) : '—'}</td>
+                  <td key={l} style={{ padding: '8px 10px', textAlign: 'right', color: f[l] ? (l==='L5'?C.naranja:C.azul) : '#ddd', fontSize: '11px', fontWeight: f[l] ? '600' : '400' }} onClick={() => onDiaClick(f.fecha)}>{f[l] ? formatNum(f[l]) : '—'}</td>
                 ))}
               </tr>
             )
           })}
         </tbody>
       </table>
+
+      {seleccionados.size > 0 && (() => {
+        const sel = filas.filter(f => seleccionados.has(f.fecha))
+        const tG   = sel.reduce((s,f) => s + (f.grande||0), 0)
+        const tC   = sel.reduce((s,f) => s + (f.chica||0), 0)
+        const tT   = sel.reduce((s,f) => s + (f.total||0), 0)
+        const tObj = sel.reduce((s,f) => s + (f.objTotal||0), 0)
+        const tNeto = sel.reduce((s,f) => s + (f.tiempoNeto||0), 0)
+        const efic = tNeto > 0 ? Math.round(tT / (tNeto / 60)) : null
+        const p = pct(tT, tObj)
+        const pColor = p >= 100 ? C.verde : p >= 80 ? C.naranja : C.rojo
+        const pBg    = p >= 100 ? C.verdeClaro : p >= 80 ? C.naranjaClaro : C.rojoClaro
+        return (
+          <div style={{ border: `2px solid ${C.azul}`, borderTop: 'none', borderRadius: '0 0 14px 14px', background: C.azulClaro, padding: '12px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', color: C.azul, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                {seleccionados.size} día{seleccionados.size > 1 ? 's' : ''} seleccionado{seleccionados.size > 1 ? 's' : ''}
+              </span>
+              <button onClick={() => setSeleccionados(new Set())}
+                style={{ fontSize: '10px', padding: '3px 10px', borderRadius: '20px', border: `1px solid ${C.azulBorde}`, background: '#fff', color: C.azul, cursor: 'pointer', fontWeight: '600' }}>
+                Limpiar
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {[
+                ['Total',        formatNum(tT),        `de ${formatNum(tObj)}`, C.texto,  null],
+                ['Cumplimiento', `${p}%`,              `${tT >= tObj ? '+' : ''}${formatNum(tT - tObj)}`, pColor, pBg],
+                ['Grande',       formatNum(tG),        null,                    C.texto,  null],
+                ['Chica',        formatNum(tC),        null,                    C.texto,  null],
+                efic ? ['Eficiencia', `${efic}/h`,     `${Math.round(tNeto/60)}h netas`, C.azul, null] : null,
+              ].filter(Boolean).map(([label, value, sub, color, bg]) => (
+                <div key={label} style={{ background: bg || '#fff', borderRadius: '9px', padding: '8px 12px', border: `1px solid ${C.azulBorde}` }}>
+                  <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '2px' }}>{label}</div>
+                  <div style={{ fontSize: '16px', fontWeight: '800', color, letterSpacing: '-0.3px' }}>{value}</div>
+                  {sub && <div style={{ fontSize: '10px', color: C.sub, marginTop: '1px' }}>{sub}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
