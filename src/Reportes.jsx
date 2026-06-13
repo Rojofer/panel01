@@ -77,10 +77,40 @@ function generarEjemplos(y, m) {
         L2: Math.round(grande * 0.26),
         L3: Math.round(grande * 0.24),
         L4: Math.round(grande * 0.22),
-      }
+      },
+      notaDia: Math.random() < 0.2 ? 'Nota de ejemplo: revisión de mantenimiento en L3 durante el turno.' : '',
     }
   }
   return result
+}
+
+// resumen liviano de un mes (solo producción, sin incidencias) — para vista anual y comparador de meses
+async function cargarResumenMes(anio, mes, usarEjemplos) {
+  if (usarEjemplos) {
+    const d = generarEjemplos(anio, mes)
+    const lista = Object.values(d)
+    return {
+      anio, mes,
+      total:  lista.reduce((s,x)=>s+x.total,0),
+      grande: lista.reduce((s,x)=>s+x.grande,0),
+      chica:  lista.reduce((s,x)=>s+x.chica,0),
+      obj:    lista.reduce((s,x)=>s+x.objTotal,0),
+      dias:   lista.length,
+    }
+  }
+  const mesStr = String(mes).padStart(2,'0')
+  const prefijo = `${anio}-${mesStr}`
+  const snap = await getDocs(collection(db,'turnos'))
+  const turnosMes = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => t.fecha?.startsWith(prefijo))
+  let total = 0, grande = 0, chica = 0, obj = 0
+  await Promise.all(turnosMes.map(async turno => {
+    const prodSnap = await getDocs(collection(db,'turnos',turno.id,'produccion'))
+    let g = 0, c = 0
+    prodSnap.docs.forEach(d => { const p = d.data(); g += p.grande||0; c += p.chica||0 })
+    grande += g; chica += c; total += g + c
+    obj += ((turno.objetivoGrande||350) + (turno.objetivoChica||100)) * 10
+  }))
+  return { anio, mes, total, grande, chica, obj, dias: turnosMes.length }
 }
 
 // ── Componente KPI ────────────────────────────────────────────────────────────
@@ -143,14 +173,16 @@ function Calendario({ y, m, datos, onDiaClick, diaSeleccionado, onSemanaClick })
                 else if (p >= 80) { bg = C.naranjaClaro; borde = '#F5D79A'; numColor = C.naranja }
                 else { bg = C.rojoClaro; borde = C.rojoBorde; numColor = C.rojo }
               }
+              const esHoy = fecha === fechaStr(new Date().getFullYear(), new Date().getMonth()+1, new Date().getDate())
               return (
                 <div key={fecha} onClick={() => dato && onDiaClick(fecha)}
-                  style={{ background: sel ? C.azulClaro : bg, border: `1.5px solid ${sel ? C.azul : borde}`, borderRadius: '8px', padding: '6px 4px', cursor: dato ? 'pointer' : 'default', minHeight: '52px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', transition: 'all .1s' }}>
+                  style={{ background: sel ? C.azulClaro : bg, border: `1.5px solid ${sel ? C.azul : borde}`, borderRadius: '8px', padding: '6px 4px', cursor: dato ? 'pointer' : 'default', minHeight: '52px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', transition: 'all .1s', outline: esHoy ? `2px solid ${C.azul}` : 'none', outlineOffset: '1px' }}>
                   <span style={{ fontSize: '11px', fontWeight: sel ? '800' : '600', color: sel ? C.azul : numColor }}>{d}</span>
                   {dato && (
                     <>
                       <span style={{ fontSize: '10px', fontWeight: '700', color: sel ? C.azul : numColor }}>{formatNum(dato.total)}</span>
                       <span style={{ fontSize: '8px', color: sel ? C.azul : C.sub }}>{pct(dato.total, dato.objTotal)}%</span>
+                      {dato.notaDia && <span title={dato.notaDia} style={{ fontSize: '8px', lineHeight: 1 }}>📝</span>}
                     </>
                   )}
                 </div>
@@ -292,6 +324,11 @@ function TablaDias({ datos, onDiaClick }) {
 // ── Modal detalle día ─────────────────────────────────────────────────────────
 function ModalDia({ fecha, dato, config, onClose }) {
   const [franjaGrafico, setFranjaGrafico] = useState(null)
+  useEffect(() => {
+    const handler = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
   if (!dato) return null
   const { y, m, d } = parseDate(fecha)
   const nombreDia = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][diaSemana(y,m,d)]
@@ -514,8 +551,346 @@ function NotaDia({ turnoId, notaInicial }) {
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
+// ── Vista anual ───────────────────────────────────────────────────────────────
+function VistaAnual({ anio, usarEjemplos, onMesClick }) {
+  const [meses, setMeses] = useState(null)
+  const [cargandoAnual, setCargandoAnual] = useState(false)
+
+  useEffect(() => {
+    let activo = true
+    setCargandoAnual(true)
+    setMeses(null)
+    Promise.all(
+      Array.from({ length: 12 }, (_, i) => cargarResumenMes(anio, i + 1, usarEjemplos))
+    ).then(res => {
+      if (!activo) return
+      setMeses(res)
+      setCargandoAnual(false)
+    })
+    return () => { activo = false }
+  }, [anio, usarEjemplos])
+
+  if (cargandoAnual || !meses) return <div style={{ textAlign: 'center', padding: '60px', color: C.sub, fontSize: '13px' }}>Cargando año {anio}...</div>
+
+  const conDatos = meses.filter(m => m.dias > 0)
+  const totalAnual = conDatos.reduce((s,m) => s + m.total, 0)
+  const objAnual   = conDatos.reduce((s,m) => s + m.obj, 0)
+  const mejorMes   = conDatos.reduce((b,m) => m.total > (b?.total||0) ? m : b, null)
+
+  // gráfico barras 12 meses
+  const W = 760, H = 220, PT = 28, PB = 30, PX = 16
+  const maxVal = Math.max(...meses.map(m => Math.max(m.total, m.obj)), 1) * 1.12
+  const slot = (W - PX*2) / 12
+  const barW = Math.max(24, slot - 18)
+
+  return (
+    <div>
+      {/* KPIs anuales */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
+        <KPICard label={`Total ${anio}`} value={formatNum(totalAnual)} sub={`de ${formatNum(objAnual)} objetivo`} />
+        <KPICard label="Cumplimiento anual" value={`${pct(totalAnual, objAnual)}%`} color={pct(totalAnual, objAnual) >= 100 ? C.verde : pct(totalAnual, objAnual) >= 80 ? C.naranja : C.rojo} bg={pct(totalAnual, objAnual) >= 100 ? C.verdeClaro : pct(totalAnual, objAnual) >= 80 ? C.naranjaClaro : C.rojoClaro} />
+        <KPICard label="Mejor mes" value={mejorMes ? MESES[mejorMes.mes-1] : '—'} sub={mejorMes ? formatNum(mejorMes.total) : null} color={C.verde} bg={C.verdeClaro} border={C.verdeBorde} />
+        <KPICard label="Meses con producción" value={conDatos.length} sub={`${conDatos.reduce((s,m)=>s+m.dias,0)} días totales`} />
+      </div>
+
+      {/* gráfico anual */}
+      <div style={{ background: '#fff', borderRadius: '12px', border: `1px solid ${C.borde}`, padding: '16px 18px' }}>
+        <div style={{ fontSize: '11px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '10px' }}>
+          Producción mensual {anio} <span style={{ fontSize: '10px', color: '#ccc', fontWeight: '400', textTransform: 'none' }}>· click en un mes para verlo en detalle</span>
+        </div>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+          {meses.map((m, i) => {
+            const x = PX + i * slot + (slot - barW) / 2
+            const xc = x + barW / 2
+            const sinDatos = m.dias === 0
+            const hT = sinDatos ? 0 : Math.round((m.total / maxVal) * (H - PT - PB))
+            const yObj = PT + (H - PT - PB) - Math.round((m.obj / maxVal) * (H - PT - PB))
+            const p = pct(m.total, m.obj)
+            const color = sinDatos ? '#e8e8e4' : p >= 100 ? '#1D9E75' : p >= 80 ? '#BA7517' : '#E24B4A'
+            return (
+              <g key={m.mes} onClick={() => !sinDatos && onMesClick(m.mes)} style={{ cursor: sinDatos ? 'default' : 'pointer' }}>
+                {sinDatos
+                  ? <rect x={x} y={H-PB-4} width={barW} height={4} fill="#e8e8e4" rx="2" />
+                  : <>
+                      <rect x={x} y={H-PB-hT} width={barW} height={hT} fill={color} rx="4" opacity=".88" />
+                      <line x1={x-4} y1={yObj} x2={x+barW+4} y2={yObj} stroke="#C8B89A" strokeWidth="1.2" strokeDasharray="4 2" />
+                      <text x={xc} y={H-PB-hT-6} textAnchor="middle" fontSize="10" fontWeight="700" fill={color} fontFamily="system-ui">{formatNum(m.total)}</text>
+                    </>
+                }
+                <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={sinDatos ? '#ccc' : '#555'} fontFamily="system-ui">{MESES[m.mes-1].slice(0,3)}</text>
+                {!sinDatos && <text x={xc} y={H-PB+25} textAnchor="middle" fontSize="8.5" fontWeight="600" fill={color} fontFamily="system-ui">{p}%</text>}
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+    </div>
+  )
+}
+
+// ── Comparador ───────────────────────────────────────────────────────────────
+function Comparador({ datos, anio, mes, usarEjemplos, onDiaClick }) {
+  const [modoComp, setModoComp] = useState('dias') // 'dias' | 'semanas' | 'meses' | 'dia-vs-promedio'
+  const [selA, setSelA] = useState(null)
+  const [selB, setSelB] = useState(null)
+  const [mesA, setMesA] = useState(null) // resumen cargado del mes A
+  const [mesB, setMesB] = useState(null)
+  const [cargandoMes, setCargandoMes] = useState(false)
+
+  // últimos 12 meses para el selector
+  const mesesDisp = useMemo(() => {
+    const res = []
+    let y = anio, m = mes
+    for (let i = 0; i < 12; i++) {
+      res.push({ anio: y, mes: m, key: `${y}-${String(m).padStart(2,'0')}`, label: `${MESES[m-1]} ${y}` })
+      m--; if (m < 1) { m = 12; y-- }
+    }
+    return res
+  }, [anio, mes])
+
+  async function cargarMesComp(key, lado) {
+    const item = mesesDisp.find(x => x.key === key)
+    if (!item) { lado === 'A' ? setMesA(null) : setMesB(null); return }
+    setCargandoMes(true)
+    const r = await cargarResumenMes(item.anio, item.mes, usarEjemplos)
+    const met = {
+      label: item.label,
+      total: r.total, grande: r.grande, chica: r.chica,
+      objTotal: r.obj, cumplimiento: pct(r.total, r.obj),
+      eficiencia: null, tiempoNeto: null, descansos: null,
+      lineas: {}, dias: r.dias,
+    }
+    lado === 'A' ? setMesA(met) : setMesB(met)
+    setCargandoMes(false)
+  }
+
+  const lista = Object.values(datos).sort((a,b) => a.fecha.localeCompare(b.fecha))
+
+  // semanas disponibles
+  const semanasDisp = useMemo(() => {
+    const mapa = {}
+    lista.forEach(d => {
+      const [y,m,dd] = d.fecha.split('-').map(Number)
+      const s = numeroSemana(y,m,dd)
+      if (!mapa[s]) mapa[s] = { semana: s, dias: [], total: 0, grande: 0, chica: 0, obj: 0, neto: 0 }
+      mapa[s].dias.push(d)
+      mapa[s].total += d.total; mapa[s].grande += d.grande; mapa[s].chica += d.chica; mapa[s].obj += d.objTotal
+      mapa[s].neto += calcMetricasDia(d).tiempoNeto || 0
+    })
+    return Object.values(mapa).sort((a,b) => a.semana - b.semana).map(s => ({
+      ...s,
+      cumplimiento: pct(s.total, s.obj),
+      eficiencia: s.neto > 0 ? Math.round(s.total / (s.neto / 60)) : null,
+    }))
+  }, [datos])
+
+  // promedio del mes
+  const promedioMes = useMemo(() => {
+    if (!lista.length) return null
+    return {
+      total: Math.round(lista.reduce((s,d)=>s+d.total,0) / lista.length),
+      grande: Math.round(lista.reduce((s,d)=>s+d.grande,0) / lista.length),
+      chica: Math.round(lista.reduce((s,d)=>s+d.chica,0) / lista.length),
+      objTotal: lista[0]?.objTotal || 0,
+      label: 'Promedio del mes',
+    }
+  }, [datos])
+
+  function calcMetricasComp(d) {
+    if (!d) return null
+    const m = calcMetricasDia(d)
+    return {
+      label: d.fecha,
+      total: d.total, grande: d.grande, chica: d.chica,
+      objTotal: d.objTotal, objGrande: d.objGrande, objChica: d.objChica,
+      cumplimiento: pct(d.total, d.objTotal),
+      eficiencia: m.tiempoNeto ? Math.round(d.total / (m.tiempoNeto / 60)) : null,
+      tiempoNeto: m.tiempoNeto, descansos: m.descansos,
+      lineas: (() => {
+        const prod = d.produccionData || {}
+        const r = {}
+        ;['L1','L2','L3','L4'].forEach(l => {
+          const t = Object.values(prod).reduce((s,p)=>s+(p.lineas?.[l]||0),0)
+          if (t > 0) r[l] = t
+        })
+        if (d.chica > 0) r['L5'] = d.chica
+        return r
+      })(),
+    }
+  }
+
+  function calcMetricasSemana(s) {
+    if (!s) return null
+    return {
+      label: `SEM ${s.semana}`,
+      total: s.total, grande: s.grande, chica: s.chica,
+      objTotal: s.obj,
+      cumplimiento: s.cumplimiento,
+      eficiencia: s.eficiencia,
+      tiempoNeto: s.neto, descansos: null,
+      lineas: s.dias.reduce((acc, d) => {
+        const prod = d.produccionData || {}
+        ;['L1','L2','L3','L4'].forEach(l => {
+          const t = Object.values(prod).reduce((ss,p)=>ss+(p.lineas?.[l]||0),0)
+          if (t > 0) acc[l] = (acc[l]||0) + t
+        })
+        if (d.chica > 0) acc['L5'] = (acc['L5']||0) + d.chica
+        return acc
+      }, {}),
+    }
+  }
+
+  // resolver métricas A y B según modo
+  const metA = useMemo(() => {
+    if (modoComp === 'meses') return mesA
+    if (modoComp === 'dias') return calcMetricasComp(lista.find(d => d.fecha === selA))
+    if (modoComp === 'semanas') return calcMetricasSemana(semanasDisp.find(s => s.semana === selA))
+    if (modoComp === 'dia-vs-promedio') return calcMetricasComp(lista.find(d => d.fecha === selA))
+    return null
+  }, [selA, modoComp, datos, mesA])
+
+  const metB = useMemo(() => {
+    if (modoComp === 'meses') return mesB
+    if (modoComp === 'dia-vs-promedio') return promedioMes ? { ...promedioMes, cumplimiento: pct(promedioMes.total, promedioMes.objTotal), eficiencia: null, tiempoNeto: null, descansos: null, lineas: {} } : null
+    if (modoComp === 'dias') return calcMetricasComp(lista.find(d => d.fecha === selB))
+    if (modoComp === 'semanas') return calcMetricasSemana(semanasDisp.find(s => s.semana === selB))
+    return null
+  }, [selB, modoComp, datos, promedioMes, mesB])
+
+  function Delta({ va, vb, suffix='', invert=false }) {
+    if (va == null || vb == null) return <span style={{color:'#ccc'}}>—</span>
+    const d = va - vb
+    const pos = invert ? d < 0 : d >= 0
+    if (d === 0) return <span style={{color:'#ccc',fontSize:'11px'}}>=</span>
+    return <span style={{fontSize:'11px',fontWeight:'700',color:pos?'#1D9E75':'#E24B4A'}}>{d>0?'+':''}{formatNum(d)}{suffix}</span>
+  }
+
+  function FilaComp({ label, va, vb, fmt, invert }) {
+    const fmtVal = v => v == null ? '—' : (fmt ? fmt(v) : formatNum(v))
+    return (
+      <tr style={{borderBottom:`1px solid ${C.borde}`}}>
+        <td style={{padding:'9px 12px',fontSize:'11px',fontWeight:'600',color:C.sub,textTransform:'uppercase',letterSpacing:'.05em'}}>{label}</td>
+        <td style={{padding:'9px 12px',textAlign:'right',fontWeight:'800',fontSize:'14px',color:C.texto}}>{fmtVal(va)}</td>
+        <td style={{padding:'9px 12px',textAlign:'center'}}><Delta va={va} vb={vb} invert={invert}/></td>
+        <td style={{padding:'9px 12px',textAlign:'right',fontWeight:'800',fontSize:'14px',color:C.texto}}>{fmtVal(vb)}</td>
+      </tr>
+    )
+  }
+
+  const btnModo = (v,label) => (
+    <button onClick={() => { setModoComp(v); setSelA(null); setSelB(null); setMesA(null); setMesB(null) }}
+      style={{padding:'5px 14px',borderRadius:'20px',border:`1.5px solid ${modoComp===v?C.azul:C.borde}`,background:modoComp===v?C.azulClaro:'#fff',color:modoComp===v?C.azul:C.sub,fontWeight:modoComp===v?'700':'400',fontSize:'12px',cursor:'pointer'}}>
+      {label}
+    </button>
+  )
+
+  const selectDia = (val, setter) => (
+    <select value={val || ''} onChange={e => setter(e.target.value || null)}
+      style={{fontSize:'12px',padding:'7px 10px',borderRadius:'9px',border:`1.5px solid ${val ? C.azul : C.borde}`,background:'#fff',color:C.texto,minWidth:'150px',fontWeight:val?'600':'400'}}>
+      <option value="">Seleccioná un día...</option>
+      {lista.map(d => <option key={d.fecha} value={d.fecha}>{d.fecha} — {formatNum(d.total)}</option>)}
+    </select>
+  )
+
+  const selectMes = (met, lado) => (
+    <select value={met ? mesesDisp.find(x => x.label === met.label)?.key || '' : ''} onChange={e => cargarMesComp(e.target.value, lado)}
+      style={{fontSize:'12px',padding:'7px 10px',borderRadius:'9px',border:`1.5px solid ${met ? C.azul : C.borde}`,background:'#fff',color:C.texto,minWidth:'150px',fontWeight:met?'600':'400'}}>
+      <option value="">Seleccioná un mes...</option>
+      {mesesDisp.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}
+    </select>
+  )
+
+  const selectSemana = (val, setter) => (
+    <select value={val ?? ''} onChange={e => setter(e.target.value ? Number(e.target.value) : null)}
+      style={{fontSize:'12px',padding:'7px 10px',borderRadius:'9px',border:`1.5px solid ${val ? C.azul : C.borde}`,background:'#fff',color:C.texto,minWidth:'150px',fontWeight:val?'600':'400'}}>
+      <option value="">Seleccioná una semana...</option>
+      {semanasDisp.map(s => <option key={s.semana} value={s.semana}>SEM {s.semana} — {formatNum(s.total)}</option>)}
+    </select>
+  )
+
+  return (
+    <div>
+      {/* selector de modo */}
+      <div style={{display:'flex',gap:'8px',marginBottom:'20px',flexWrap:'wrap'}}>
+        {btnModo('dias','Día vs Día')}
+        {btnModo('semanas','Semana vs Semana')}
+        {btnModo('meses','Mes vs Mes')}
+        {btnModo('dia-vs-promedio','Día vs Promedio del mes')}
+      </div>
+
+      {/* selectores */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:'16px',alignItems:'center',marginBottom:'24px',background:'#fff',borderRadius:'12px',border:`1px solid ${C.borde}`,padding:'16px 20px'}}>
+        <div>
+          <div style={{fontSize:'10px',fontWeight:'700',color:C.sub,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:'8px'}}>Período A</div>
+          {modoComp === 'meses' ? selectMes(mesA, 'A') : modoComp === 'semanas' ? selectSemana(selA, setSelA) : selectDia(selA, setSelA)}
+        </div>
+        <div style={{fontSize:'18px',color:'#ccc',fontWeight:'300',textAlign:'center'}}>VS</div>
+        <div>
+          <div style={{fontSize:'10px',fontWeight:'700',color:C.sub,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:'8px'}}>
+            {modoComp === 'dia-vs-promedio' ? 'Promedio del mes' : 'Período B'}
+          </div>
+          {modoComp === 'dia-vs-promedio'
+            ? <div style={{fontSize:'13px',fontWeight:'700',color:C.azul,padding:'7px 10px',background:C.azulClaro,borderRadius:'9px',border:`1.5px solid ${C.azulBorde}`}}>Promedio: {promedioMes ? formatNum(promedioMes.total) : '—'} cuartos/día</div>
+            : modoComp === 'meses' ? selectMes(mesB, 'B')
+            : modoComp === 'semanas' ? selectSemana(selB, setSelB) : selectDia(selB, setSelB)
+          }
+        </div>
+      </div>
+
+      {/* tabla comparativa */}
+      {cargandoMes && <div style={{ textAlign: 'center', padding: '16px', color: C.sub, fontSize: '12px' }}>Cargando mes...</div>}
+
+      {(metA || metB) && (
+        <div style={{background:'#fff',borderRadius:'12px',border:`1px solid ${C.borde}`,overflow:'hidden'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px'}}>
+            <thead>
+              <tr style={{borderBottom:`2px solid ${C.borde}`,background:C.grisClaro}}>
+                <th style={{padding:'10px 12px',textAlign:'left',fontSize:'10px',fontWeight:'700',color:C.sub,textTransform:'uppercase',letterSpacing:'.06em',width:'140px'}}>Métrica</th>
+                <th style={{padding:'10px 12px',textAlign:'right',fontSize:'12px',fontWeight:'800',color:C.azul,minWidth:'120px'}}>{metA?.label || '—'}</th>
+                <th style={{padding:'10px 12px',textAlign:'center',fontSize:'10px',fontWeight:'700',color:C.sub,width:'70px'}}>Δ</th>
+                <th style={{padding:'10px 12px',textAlign:'right',fontSize:'12px',fontWeight:'800',color:C.naranja,minWidth:'120px'}}>{metB?.label || '—'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <FilaComp label="Total" va={metA?.total} vb={metB?.total} />
+              {modoComp === 'meses' && <FilaComp label="Días trabajados" va={metA?.dias} vb={metB?.dias} />}
+              <FilaComp label="Grande" va={metA?.grande} vb={metB?.grande} />
+              <FilaComp label="Chica" va={metA?.chica} vb={metB?.chica} />
+              <FilaComp label="Cumplimiento" va={metA?.cumplimiento} vb={metB?.cumplimiento} fmt={v=>`${v}%`} />
+              <FilaComp label="Eficiencia/h" va={metA?.eficiencia} vb={metB?.eficiencia} fmt={v=>v?`${v}/h`:'—'} />
+              <FilaComp label="Tiempo neto" va={metA?.tiempoNeto} vb={metB?.tiempoNeto} fmt={v=>v?`${v}m`:'—'} />
+              {/* líneas */}
+              {['L1','L2','L3','L4','L5'].filter(l => (metA?.lineas?.[l] || metB?.lineas?.[l])).map(l => (
+                <FilaComp key={l} label={l + (l==='L5'?' (chica)':'')} va={metA?.lineas?.[l]} vb={metB?.lineas?.[l]} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!metA && !metB && (
+        <div style={{textAlign:'center',padding:'50px',color:'#ccc',fontSize:'13px'}}>Seleccioná los períodos para comparar</div>
+      )}
+    </div>
+  )
+}
+
 // ── Vista semanal ─────────────────────────────────────────────────────────────
 function VistaSemana({ datos, anio, mes, semana, onSemanaChange, onDiaClick }) {
+  // semanas disponibles en los datos cargados
+  const semanasDisponibles = useMemo(() => {
+    const set = new Set()
+    Object.values(datos).forEach(d => {
+      const [y, m, dd] = d.fecha.split('-').map(Number)
+      set.add(numeroSemana(y, m, dd))
+    })
+    return [...set].sort((a,b) => a-b)
+  }, [datos])
+  const minSem = semanasDisponibles[0]
+  const maxSem = semanasDisponibles[semanasDisponibles.length - 1]
+  const puedeAnterior = semana > minSem
+  const puedeSiguiente = semana < maxSem
+
   const dias = Object.values(datos)
     .filter(d => {
       const [y, m, dd] = d.fecha.split('-').map(Number)
@@ -546,7 +921,7 @@ function VistaSemana({ datos, anio, mes, semana, onSemanaChange, onDiaClick }) {
     <div>
       {/* nav semana */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-        <button onClick={() => onSemanaChange(semana - 1)} style={{ width: '28px', height: '28px', borderRadius: '7px', border: `1px solid ${C.borde}`, background: '#fff', cursor: 'pointer', fontSize: '14px', color: C.sub }}>‹</button>
+        <button onClick={() => puedeAnterior && onSemanaChange(semana - 1)} disabled={!puedeAnterior} style={{ width: '28px', height: '28px', borderRadius: '7px', border: `1px solid ${C.borde}`, background: puedeAnterior ? '#fff' : C.grisClaro, cursor: puedeAnterior ? 'pointer' : 'default', fontSize: '14px', color: puedeAnterior ? C.sub : '#ddd' }}>‹</button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#111', color: '#fff', borderRadius: '8px', padding: '4px 10px', lineHeight: 1 }}>
             <span style={{ fontSize: '7px', fontWeight: '600', letterSpacing: '.1em', opacity: .6 }}>SEM</span>
@@ -554,10 +929,24 @@ function VistaSemana({ datos, anio, mes, semana, onSemanaChange, onDiaClick }) {
           </div>
           <span style={{ fontSize: '13px', fontWeight: '600', color: C.sub }}>{MESES[mes-1]} {anio}</span>
         </div>
-        <button onClick={() => onSemanaChange(semana + 1)} style={{ width: '28px', height: '28px', borderRadius: '7px', border: `1px solid ${C.borde}`, background: '#fff', cursor: 'pointer', fontSize: '14px', color: C.sub }}>›</button>
+        <button onClick={() => puedeSiguiente && onSemanaChange(semana + 1)} disabled={!puedeSiguiente} style={{ width: '28px', height: '28px', borderRadius: '7px', border: `1px solid ${C.borde}`, background: puedeSiguiente ? '#fff' : C.grisClaro, cursor: puedeSiguiente ? 'pointer' : 'default', fontSize: '14px', color: puedeSiguiente ? C.sub : '#ddd' }}>›</button>
       </div>
 
-      {!kpis && <div style={{ textAlign: 'center', padding: '50px', color: '#ccc', fontSize: '13px' }}>Sin datos para la semana {semana}</div>}
+      {!kpis && (
+        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ color: '#ccc', fontSize: '13px', marginBottom: '14px' }}>Sin datos para la semana {semana}</div>
+          {semanasDisponibles.length > 0 && (
+            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              {semanasDisponibles.map(s => (
+                <button key={s} onClick={() => onSemanaChange(s)}
+                  style={{ padding: '5px 14px', borderRadius: '20px', border: `1.5px solid ${C.azulBorde}`, background: C.azulClaro, color: C.azul, fontWeight: '700', fontSize: '12px', cursor: 'pointer' }}>
+                  SEM {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {kpis && (
         <>
@@ -783,7 +1172,8 @@ export default function Reportes({ onVolver }) {
   const [vistaTabla, setVistaTabla] = useState(true)
   const [usarEjemplos, setUsarEjemplos] = useState(true)
   const [config, setConfig] = useState(null)
-  const [vista, setVista] = useState('mes') // 'mes' | 'semana' | 'resumen'
+  const [vista, setVista] = useState('mes') // 'mes' | 'semana' | 'resumen' | 'año' | 'comparar'
+  const [filtroTabla, setFiltroTabla] = useState('todos') // 'todos' | 'bajo' | 'nota'
   const [semanaSel, setSemanaSel] = useState(numeroSemana(hoy.getFullYear(), hoy.getMonth()+1, hoy.getDate()))
 
   // Cargar config una sola vez
@@ -863,8 +1253,28 @@ export default function Reportes({ onVolver }) {
     const totalIncs = lista.reduce((s, d) => s + d.incidencias, 0)
     const totalTiempo = lista.reduce((s, d) => s + d.tiempoPerdido, 0)
     const promDiario = Math.round(totalProd / diasConDatos)
-    return { totalG, totalC, totalProd, totalObj, diasConDatos, diasSinDatos: Math.max(0, diasSinDatos), mejorDia, peorDia, totalIncs, totalTiempo, promDiario, cumplimiento: pct(totalProd, totalObj) }
+    // racha actual de días consecutivos (con datos) bajo objetivo, desde el día más reciente hacia atrás
+    const ordenados = [...lista].sort((a,b) => b.fecha.localeCompare(a.fecha))
+    let racha = 0, rachaInicio = null, rachaFin = null
+    for (const d of ordenados) {
+      if (pct(d.total, d.objTotal) < 100) {
+        racha++
+        if (!rachaFin) rachaFin = d.fecha
+        rachaInicio = d.fecha
+      } else break
+    }
+    return { totalG, totalC, totalProd, totalObj, diasConDatos, diasSinDatos: Math.max(0, diasSinDatos), mejorDia, peorDia, totalIncs, totalTiempo, promDiario, cumplimiento: pct(totalProd, totalObj), racha, rachaInicio, rachaFin }
   }, [datos])
+
+  const datosFiltrados = useMemo(() => {
+    if (filtroTabla === 'todos') return datos
+    const entradas = Object.entries(datos).filter(([, d]) => {
+      if (filtroTabla === 'bajo') return pct(d.total, d.objTotal) < 100
+      if (filtroTabla === 'nota') return !!d.notaDia
+      return true
+    })
+    return Object.fromEntries(entradas)
+  }, [datos, filtroTabla])
 
   function navMes(delta) {
     let nm = mes + delta, na = anio
@@ -886,13 +1296,13 @@ export default function Reportes({ onVolver }) {
       `}</style>
 
       {/* header */}
-      <div style={{ background: '#fff', borderBottom: `1px solid ${C.borde}`, padding: '0 24px', height: '54px', display: 'flex', alignItems: 'center', gap: '16px', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+      <div style={{ background: '#fff', borderBottom: `1px solid ${C.borde}`, padding: '8px 24px', minHeight: '54px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <button onClick={onVolver} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '7px', border: `1px solid ${C.borde}`, background: C.grisClaro, cursor: 'pointer', color: C.sub }}>← Volver</button>
         <div style={{ fontSize: '16px', fontWeight: '800', color: C.texto, letterSpacing: '-0.3px' }}>Reportes</div>
 
         {/* tabs */}
         <div style={{ display: 'flex', background: C.grisClaro, borderRadius: '8px', padding: '2px', border: `1px solid ${C.borde}` }}>
-          {[['mes','Mes'],['semana','Semana'],['resumen','Resumen']].map(([v,label]) => (
+          {[['mes','Mes'],['semana','Semana'],['resumen','Resumen'],['año','Año'],['comparar','Comparar']].map(([v,label]) => (
             <button key={v} onClick={() => setVista(v)}
               style={{ padding: '4px 14px', borderRadius: '6px', border: 'none', background: vista === v ? '#fff' : 'transparent', cursor: 'pointer', fontSize: '12px', color: vista === v ? C.texto : C.sub, fontWeight: vista === v ? '700' : '400', boxShadow: vista === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
               {label}
@@ -919,31 +1329,55 @@ export default function Reportes({ onVolver }) {
             style={{ fontSize: '10px', padding: '3px 10px', borderRadius: '20px', border: `1px solid ${usarEjemplos ? C.naranja : C.azul}`, background: usarEjemplos ? C.naranjaClaro : C.azulClaro, color: usarEjemplos ? C.naranja : C.azul, cursor: 'pointer', fontWeight: '600' }}>
             {usarEjemplos ? '⚡ Ejemplo' : '🔥 Real'}
           </button>
-          {/* toggle calendario/tabla */}
-          <div style={{ display: 'flex', background: C.grisClaro, borderRadius: '8px', padding: '2px', border: `1px solid ${C.borde}` }}>
+          {/* toggle calendario/tabla — solo en vista mes */}
+          {vista === 'mes' && <div style={{ display: 'flex', background: C.grisClaro, borderRadius: '8px', padding: '2px', border: `1px solid ${C.borde}` }}>
             {[['📅', true, 'Calendario'], ['📋', false, 'Tabla']].map(([icon, v, label]) => (
               <button key={label} onClick={() => setVistaTabla(!v)}
                 style={{ padding: '4px 10px', borderRadius: '6px', border: 'none', background: vistaTabla !== v ? '#fff' : 'transparent', cursor: 'pointer', fontSize: '11px', color: vistaTabla !== v ? C.texto : C.sub, fontWeight: vistaTabla !== v ? '600' : '400', boxShadow: vistaTabla !== v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
                 {icon} {label}
               </button>
             ))}
-          </div>
+          </div>}
         </div>
       </div>
 
       <div style={{ padding: '20px 24px', maxWidth: '1200px', margin: '0 auto' }} className="print-area">
 
-        {vista === 'semana' && (
+        {cargando && vista !== 'mes' && (
+          <div style={{ textAlign: 'center', padding: '60px', color: C.sub, fontSize: '13px' }}>Cargando datos...</div>
+        )}
+
+        {vista === 'año' && (
+          <VistaAnual anio={anio} usarEjemplos={usarEjemplos}
+            onMesClick={m => { setMes(m); setVista('mes') }} />
+        )}
+
+        {!cargando && vista === 'comparar' && (
+          <Comparador datos={datos} anio={anio} mes={mes} usarEjemplos={usarEjemplos} onDiaClick={setDiaSeleccionado} />
+        )}
+
+        {!cargando && vista === 'semana' && (
           <VistaSemana datos={datos} anio={anio} mes={mes} semana={semanaSel}
             onSemanaChange={s => setSemanaSel(s)} onDiaClick={setDiaSeleccionado} />
         )}
 
-        {vista === 'resumen' && (
+        {!cargando && vista === 'resumen' && (
           <ResumenMensual datos={datos} anio={anio} mes={mes}
             onSemanaClick={s => { setSemanaSel(s); setVista('semana') }} />
         )}
 
         {vista === 'mes' && (<>
+
+        {/* alerta de racha */}
+        {kpis && kpis.racha >= 3 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: C.rojoClaro, border: `1.5px solid ${C.rojoBorde}`, borderRadius: '12px', padding: '12px 16px', marginBottom: '14px' }}>
+            <span style={{ fontSize: '18px' }}>⚠️</span>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: C.rojo }}>{kpis.racha} días consecutivos bajo objetivo</div>
+              <div style={{ fontSize: '11px', color: C.sub, marginTop: '1px' }}>Desde el {kpis.rachaInicio} hasta el {kpis.rachaFin} (días con producción registrada)</div>
+            </div>
+          </div>
+        )}
 
         {/* KPIs del mes */}
         {kpis && (
@@ -984,13 +1418,20 @@ export default function Reportes({ onVolver }) {
 
             {/* tabla */}
             <div style={{ background: '#fff', borderRadius: '14px', border: `1px solid ${C.borde}`, overflow: 'hidden' }}>
-              <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.borde}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.borde}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ fontSize: '12px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em' }}>
-                  Días del mes <span style={{ color: C.azul, fontWeight: '800' }}>({Object.keys(datos).length})</span>
+                  Días del mes <span style={{ color: C.azul, fontWeight: '800' }}>({Object.keys(datosFiltrados).length})</span>
                 </div>
-                <div style={{ fontSize: '10px', color: '#ccc' }}>Click en fila para detalle</div>
+                <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                  {[['todos','Todos'],['bajo','Bajo objetivo'],['nota','Con nota 📝']].map(([v,label]) => (
+                    <button key={v} onClick={() => setFiltroTabla(v)}
+                      style={{ fontSize: '10px', padding: '3px 10px', borderRadius: '20px', border: `1.5px solid ${filtroTabla === v ? C.azul : C.borde}`, background: filtroTabla === v ? C.azulClaro : '#fff', color: filtroTabla === v ? C.azul : C.sub, fontWeight: filtroTabla === v ? '700' : '400', cursor: 'pointer' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <TablaDias datos={datos} onDiaClick={setDiaSeleccionado} />
+              <TablaDias datos={datosFiltrados} onDiaClick={setDiaSeleccionado} />
             </div>
           </div>
         )}
