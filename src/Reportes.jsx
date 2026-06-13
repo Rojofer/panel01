@@ -125,7 +125,7 @@ function KPICard({ label, value, sub, color, bg, border, small }) {
 }
 
 // ── Calendario ────────────────────────────────────────────────────────────────
-function Calendario({ y, m, datos, onDiaClick, diaSeleccionado, onSemanaClick }) {
+function Calendario({ y, m, datos, feriados = [], onDiaClick, diaSeleccionado, onSemanaClick }) {
   const total = diasEnMes(y, m)
   const primerDow = diaSemana(y, m, 1)
   const celdas = []
@@ -164,8 +164,10 @@ function Calendario({ y, m, datos, onDiaClick, diaSeleccionado, onSemanaClick })
               const sel   = diaSeleccionado === fecha
               const dow   = diaSemana(y, m, d)
               const esDom = dow === 0
+              const esFeriado = feriados.includes(fecha)
               let bg = '#fff', borde = C.grisBorde, numColor = C.sub
-              if (esDom) { bg = '#FAFAF8'; numColor = '#ccc' }
+              if (esFeriado) { bg = '#FFFBF0'; borde = '#F5D79A'; numColor = '#BA7517' }
+              else if (esDom) { bg = '#FAFAF8'; numColor = '#ccc' }
               else if (!dato) { bg = '#F7F7F5'; numColor = '#ccc' }
               else {
                 const p = pct(dato.total, dato.objTotal)
@@ -177,7 +179,7 @@ function Calendario({ y, m, datos, onDiaClick, diaSeleccionado, onSemanaClick })
               return (
                 <div key={fecha} onClick={() => dato && onDiaClick(fecha)}
                   style={{ background: sel ? C.azulClaro : bg, border: `1.5px solid ${sel ? C.azul : borde}`, borderRadius: '8px', padding: '6px 4px', cursor: dato ? 'pointer' : 'default', minHeight: '52px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', transition: 'all .1s', outline: esHoy ? `2px solid ${C.azul}` : 'none', outlineOffset: '1px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: sel ? '800' : '600', color: sel ? C.azul : numColor }}>{d}</span>
+                  <span style={{ fontSize: '11px', fontWeight: sel ? '800' : '600', color: sel ? C.azul : numColor }}>{d}{esFeriado && <span style={{ fontSize:'8px', fontWeight:'700', color:'#BA7517', marginLeft:'2px' }}>F</span>}</span>
                   {dato && (
                     <>
                       <span style={{ fontSize: '10px', fontWeight: '700', color: sel ? C.azul : numColor }}>{formatNum(dato.total)}</span>
@@ -193,7 +195,7 @@ function Calendario({ y, m, datos, onDiaClick, diaSeleccionado, onSemanaClick })
       })}
       {/* leyenda */}
       <div style={{ display: 'flex', gap: '12px', marginTop: '10px', flexWrap: 'wrap' }}>
-        {[['#1D9E75','#EDFBF4','≥100% objetivo'],['#BA7517','#FFF8EE','80–99%'],['#E24B4A','#FEF2F2','<80%'],['#ccc','#F7F7F5','Sin datos']].map(([c,bg,t]) => (
+        {[['#1D9E75','#EDFBF4','≥100% objetivo'],['#BA7517','#FFF8EE','80–99%'],['#E24B4A','#FEF2F2','<80%'],['#ccc','#F7F7F5','Sin datos'],['#BA7517','#FFFBF0','Feriado (F)']].map(([c,bg,t]) => (
           <div key={t} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: bg, border: `1.5px solid ${c}` }} />
             <span style={{ fontSize: '10px', color: C.sub }}>{t}</span>
@@ -1176,9 +1178,12 @@ export default function Reportes({ onVolver }) {
   const [filtroTabla, setFiltroTabla] = useState('todos') // 'todos' | 'bajo' | 'nota'
   const [semanaSel, setSemanaSel] = useState(numeroSemana(hoy.getFullYear(), hoy.getMonth()+1, hoy.getDate()))
 
-  // Cargar config una sola vez
+  const [feriados, setFeriados] = useState([]) // array 'YYYY-MM-DD'
+
+  // Cargar config y feriados una sola vez
   useEffect(() => {
     getDoc(doc(db,'config','turno')).then(s => { if (s.exists()) setConfig(s.data()) })
+    getDoc(doc(db,'config','feriados')).then(s => { if (s.exists()) setFeriados(s.data().fechas || []) })
   }, [])
 
   // ── Cargar datos ────────────────────────────────────────────────────────────
@@ -1239,21 +1244,29 @@ export default function Reportes({ onVolver }) {
   const kpis = useMemo(() => {
     const lista = Object.values(datos)
     if (!lista.length) return null
+    // días feriados del mes actual
+    const mesStr = `${anio}-${String(mes).padStart(2,'0')}`
+    const feriadosMes = feriados.filter(f => f.startsWith(mesStr))
     const totalG    = lista.reduce((s, d) => s + d.grande, 0)
     const totalC    = lista.reduce((s, d) => s + d.chica,  0)
     const totalProd = lista.reduce((s, d) => s + d.total,  0)
+    // objetivo excluye feriados: cada feriado = un día menos de objetivo
+    const objPorDia = lista.length > 0 ? lista[0].objTotal : 0
     const totalObj  = lista.reduce((s, d) => s + d.objTotal, 0)
     const diasConDatos = lista.length
-    const diasSinDatos = diasEnMes(anio, mes) - diasConDatos - lista.filter((_,i) => {
-      const d = parseInt(Object.keys(datos)[i]?.split('-')[2])
-      return diaSemana(anio, mes, d) === 0
-    }).length
+    // días sin datos = días hábiles sin feriados sin turno
+    const totalDias = diasEnMes(anio, mes)
+    let diasHabiles = 0
+    for (let d = 1; d <= totalDias; d++) {
+      const f = fechaStr(anio, mes, d)
+      if (diaSemana(anio, mes, d) !== 0 && !feriados.includes(f)) diasHabiles++
+    }
+    const diasSinDatos = Math.max(0, diasHabiles - diasConDatos)
     const mejorDia  = lista.reduce((best, d) => d.total > (best?.total || 0) ? d : best, null)
     const peorDia   = lista.reduce((worst, d) => d.total < (worst?.total || Infinity) ? d : worst, null)
     const totalIncs = lista.reduce((s, d) => s + d.incidencias, 0)
     const totalTiempo = lista.reduce((s, d) => s + d.tiempoPerdido, 0)
     const promDiario = Math.round(totalProd / diasConDatos)
-    // racha actual de días consecutivos (con datos) bajo objetivo, desde el día más reciente hacia atrás
     const ordenados = [...lista].sort((a,b) => b.fecha.localeCompare(a.fecha))
     let racha = 0, rachaInicio = null, rachaFin = null
     for (const d of ordenados) {
@@ -1263,8 +1276,8 @@ export default function Reportes({ onVolver }) {
         rachaInicio = d.fecha
       } else break
     }
-    return { totalG, totalC, totalProd, totalObj, diasConDatos, diasSinDatos: Math.max(0, diasSinDatos), mejorDia, peorDia, totalIncs, totalTiempo, promDiario, cumplimiento: pct(totalProd, totalObj), racha, rachaInicio, rachaFin }
-  }, [datos])
+    return { totalG, totalC, totalProd, totalObj, diasConDatos, diasSinDatos, mejorDia, peorDia, totalIncs, totalTiempo, promDiario, cumplimiento: pct(totalProd, totalObj), racha, rachaInicio, rachaFin, feriadosMes: feriadosMes.length, diasHabiles }
+  }, [datos, feriados])
 
   const datosFiltrados = useMemo(() => {
     if (filtroTabla === 'todos') return datos
@@ -1375,7 +1388,7 @@ export default function Reportes({ onVolver }) {
             <KPICard label="Total producido" value={formatNum(kpis.totalProd)} sub={`de ${formatNum(kpis.totalObj)} objetivo`} />
             <KPICard label="Cumplimiento" value={`${kpis.cumplimiento}%`} sub={`${kpis.totalProd >= kpis.totalObj ? '+' : ''}${formatNum(kpis.totalProd - kpis.totalObj)} cuartos`} color={kpis.cumplimiento >= 100 ? C.verde : kpis.cumplimiento >= 80 ? C.naranja : C.rojo} bg={kpis.cumplimiento >= 100 ? C.verdeClaro : kpis.cumplimiento >= 80 ? C.naranjaClaro : C.rojoClaro} border={kpis.cumplimiento >= 100 ? C.verdeBorde : kpis.cumplimiento >= 80 ? '#F5D79A' : C.rojoBorde} />
             <KPICard label="Incidencias totales" value={kpis.totalIncs} sub={`${kpis.totalTiempo} min perdidos`} color={kpis.totalIncs > 0 ? C.rojo : C.gris} />
-            <KPICard label="Promedio diario" value={formatNum(kpis.promDiario)} sub={`${kpis.diasConDatos} días con datos · ${kpis.diasSinDatos} sin datos`} />
+            <KPICard label="Promedio diario" value={formatNum(kpis.promDiario)} sub={`${kpis.diasConDatos} de ${kpis.diasHabiles} días hábiles${kpis.feriadosMes > 0 ? ` · ${kpis.feriadosMes} feriado${kpis.feriadosMes > 1 ? 's' : ''}` : ''}`} />
           </div>
         )}
 
@@ -1406,7 +1419,7 @@ export default function Reportes({ onVolver }) {
             {!vistaTabla && (
               <div style={{ background: '#fff', borderRadius: '14px', border: `1px solid ${C.borde}`, padding: '18px 20px' }}>
                 <div style={{ fontSize: '12px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '14px' }}>Calendario</div>
-                <Calendario y={anio} m={mes} datos={datos} onDiaClick={setDiaSeleccionado} diaSeleccionado={diaSeleccionado} onSemanaClick={s => { setSemanaSel(s); setVista('semana') }} />
+                <Calendario y={anio} m={mes} datos={datos} feriados={feriados} onDiaClick={setDiaSeleccionado} diaSeleccionado={diaSeleccionado} onSemanaClick={s => { setSemanaSel(s); setVista('semana') }} />
               </div>
             )}
 
