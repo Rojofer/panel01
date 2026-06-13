@@ -187,7 +187,6 @@ export default function Tablero({ user, userData, onVerReportes }) {
           onProduccion={() => setPanelProduccion(true)}
           onHistorial={() => setModalHistorial(true)}
           onConfig={() => setModalConfig(true)}
-          onInforme={onVerInforme}
           onReportes={onVerReportes}
           onSalir={() => signOut(auth)}
         />
