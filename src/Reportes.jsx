@@ -1368,16 +1368,6 @@ export default function Reportes({ onVolver }) {
 
         {vista === 'mes' && (<>
 
-        {/* alerta de racha */}
-        {kpis && kpis.racha >= 3 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: C.rojoClaro, border: `1.5px solid ${C.rojoBorde}`, borderRadius: '12px', padding: '12px 16px', marginBottom: '14px' }}>
-            <span style={{ fontSize: '18px' }}>⚠️</span>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: '700', color: C.rojo }}>{kpis.racha} días consecutivos bajo objetivo</div>
-              <div style={{ fontSize: '11px', color: C.sub, marginTop: '1px' }}>Desde el {kpis.rachaInicio} hasta el {kpis.rachaFin} (días con producción registrada)</div>
-            </div>
-          </div>
-        )}
 
         {/* KPIs del mes */}
         {kpis && (
@@ -1394,8 +1384,12 @@ export default function Reportes({ onVolver }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '24px' }}>
             <KPICard label="Sala grande total" value={formatNum(kpis.totalG)} small />
             <KPICard label="Sala chica total" value={formatNum(kpis.totalC)} small />
-            <KPICard label="Mejor día" value={kpis.mejorDia ? formatNum(kpis.mejorDia.total) : '—'} sub={kpis.mejorDia?.fecha} color={C.verde} bg={C.verdeClaro} border={C.verdeBorde} small />
-            <KPICard label="Día más bajo" value={kpis.peorDia ? formatNum(kpis.peorDia.total) : '—'} sub={kpis.peorDia?.fecha} color={C.rojo} bg={C.rojoClaro} border={C.rojoBorde} small />
+            <div onClick={() => kpis.mejorDia && setDiaSeleccionado(kpis.mejorDia.fecha)} style={{ cursor: kpis.mejorDia ? 'pointer' : 'default' }}>
+              <KPICard label="Mejor día ↗" value={kpis.mejorDia ? formatNum(kpis.mejorDia.total) : '—'} sub={kpis.mejorDia?.fecha} color={C.verde} bg={C.verdeClaro} border={C.verdeBorde} small />
+            </div>
+            <div onClick={() => kpis.peorDia && setDiaSeleccionado(kpis.peorDia.fecha)} style={{ cursor: kpis.peorDia ? 'pointer' : 'default' }}>
+              <KPICard label="Día más bajo ↗" value={kpis.peorDia ? formatNum(kpis.peorDia.total) : '—'} sub={kpis.peorDia?.fecha} color={C.rojo} bg={C.rojoClaro} border={C.rojoBorde} small />
+            </div>
           </div>
         )}
 
