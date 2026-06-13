@@ -9,6 +9,10 @@ export default function Produccion({ turnoId, config, onClose }) {
   // campos de edición
   const [lineas, setLineas] = useState({ L1:'', L2:'', L3:'', L4:'', L5:'' })
   const [saving, setSaving] = useState(false)
+  const [cabezas, setCabezas] = useState('')
+  const [savingCabezas, setSavingCabezas] = useState(false)
+  const [savedCabezas, setSavedCabezas] = useState(false)
+  const [fechaTurno, setFechaTurno] = useState(null) // 'YYYY-MM-DD' del turno activo
 
   // ingresos
   const [primerIngresoGrande, setPrimerIngresoGrande] = useState('')
@@ -41,6 +45,13 @@ export default function Produccion({ turnoId, config, onClose }) {
     getDoc(doc(db,'turnos',turnoId)).then(s => {
       if (!s.exists()) return
       const d = s.data()
+      if (d.fecha) {
+        setFechaTurno(d.fecha)
+        // cargar cabezas del día siguiente
+        getDoc(doc(db,'produccion-diaria',d.fecha)).then(pd => {
+          if (pd.exists() && pd.data().cabezas) setCabezas(String(pd.data().cabezas))
+        })
+      }
       if (d.primerIngresoGrande) setPrimerIngresoGrande(d.primerIngresoGrande)
       if (d.primerIngresoChica)  setPrimerIngresoChica(d.primerIngresoChica)
       if (d.ultimoIngresoGrande) setUltimoIngresoGrande(d.ultimoIngresoGrande)
@@ -53,6 +64,15 @@ export default function Produccion({ turnoId, config, onClose }) {
   async function guardarCampo(campo, valor) {
     await updateDoc(doc(db,'turnos',turnoId), { [campo]: valor })
   }
+  async function guardarCabezas() {
+    if (!fechaTurno || cabezas === '') return
+    setSavingCabezas(true)
+    await setDoc(doc(db,'produccion-diaria',fechaTurno), { cabezas: Number(cabezas) }, { merge: true })
+    setSavingCabezas(false)
+    setSavedCabezas(true)
+    setTimeout(() => setSavedCabezas(false), 2000)
+  }
+
   async function guardarDescansos() {
     await updateDoc(doc(db,'turnos',turnoId), { descansosGrande, descansosChica })
   }
@@ -202,6 +222,24 @@ export default function Produccion({ turnoId, config, onClose }) {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Cabezas faenadas */}
+          <div style={{marginBottom:'16px'}}>
+            <div style={{fontSize:'11px',fontWeight:'700',color:'#555',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px'}}>
+              Cabezas faenadas
+              <span style={{fontSize:'9px',fontWeight:'400',color:'#bbb',textTransform:'none',letterSpacing:0}}>se carga a día vencido</span>
+            </div>
+            <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+              <input type="number" value={cabezas} placeholder="ej: 1250"
+                onChange={e => setCabezas(e.target.value)}
+                style={{flex:1,fontSize:'20px',fontWeight:'800',borderRadius:'10px',border:`1.5px solid ${cabezas?'#185FA5':'#e8e8e8'}`,padding:'10px 14px',textAlign:'center',color:'#185FA5',background:cabezas?'#f0f6ff':'#fafafa'}}/>
+              <button onClick={guardarCabezas} disabled={!cabezas || savingCabezas}
+                style={{padding:'10px 16px',borderRadius:'10px',border:'none',background:savedCabezas?'#1D9E75':cabezas&&!savingCabezas?'#185FA5':'#e8e8e8',color:cabezas?'#fff':'#bbb',fontWeight:'700',fontSize:'12px',cursor:cabezas?'pointer':'default',whiteSpace:'nowrap'}}>
+                {savedCabezas ? '✓ Guardado' : savingCabezas ? '...' : 'Guardar'}
+              </button>
+            </div>
+            {fechaTurno && <div style={{fontSize:'10px',color:'#bbb',marginTop:'5px'}}>Fecha del turno: {fechaTurno}</div>}
           </div>
 
           {/* Franjas */}
