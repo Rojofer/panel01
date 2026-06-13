@@ -210,6 +210,93 @@ function Calendario({ y, m, datos, feriados = [], onDiaClick, diaSeleccionado, o
   )
 }
 
+
+// ── Gráfico de barras: cuartos por día del mes ───────────────────────────────
+function GraficoBarrasMes({ y, m, datos, feriados = [], onDiaClick }) {
+  const total = diasEnMes(y, m)
+  // todos los días del mes, con o sin datos
+  const dias = []
+  for (let d = 1; d <= total; d++) {
+    const fecha = fechaStr(y, m, d)
+    dias.push({ d, fecha, dato: datos[fecha], dow: diaSemana(y, m, d), esFeriado: feriados.includes(fecha) })
+  }
+
+  const objDia = (() => {
+    const conDato = Object.values(datos)[0]
+    return conDato?.objTotal || 0
+  })()
+  const maxVal = Math.max(...dias.map(x => x.dato?.total || 0), objDia, 1) * 1.12
+
+  const W = 1000, H = 280, PT = 24, PB = 44, PX = 8
+  const slot = (W - PX * 2) / dias.length
+  const barW = Math.max(8, slot - 4)
+  const chartH = H - PT - PB
+  const yZero = PT + chartH
+  const yObj = objDia > 0 ? PT + chartH - Math.round((objDia / maxVal) * chartH) : null
+
+  return (
+    <div style={{ background: '#fff', borderRadius: '14px', border: `1px solid ${C.borde}`, padding: '18px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+        <div style={{ fontSize: '12px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em' }}>Cuartos producidos por día</div>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: C.verde }} />≥100%</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: C.naranja }} />80–99%</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: C.rojo }} />&lt;80%</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '14px', height: '0', borderTop: '1.5px dashed #C8B89A' }} />Objetivo</span>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+        {/* línea de objetivo */}
+        {yObj != null && (
+          <>
+            <line x1={PX} y1={yObj} x2={W-PX} y2={yObj} stroke="#C8B89A" strokeWidth="1.3" strokeDasharray="5 3" />
+            <text x={W-PX} y={yObj-4} textAnchor="end" fontSize="10" fill="#BA7517" fontWeight="700" fontFamily="system-ui">obj {formatNum(objDia)}</text>
+          </>
+        )}
+        {/* línea base */}
+        <line x1={PX} y1={yZero} x2={W-PX} y2={yZero} stroke="#E8E8E4" strokeWidth="1" />
+
+        {dias.map((x, i) => {
+          const px = PX + i * slot
+          const xc = px + slot / 2
+          const esFinde = x.dow === 0 || x.dow === 6
+          // fondo tenue para finde/feriado
+          const bgCol = x.esFeriado ? '#FFFBF0' : esFinde ? '#FAFAF8' : null
+          const bgEl = bgCol ? <rect x={px} y={PT} width={slot} height={chartH} fill={bgCol} /> : null
+
+          if (!x.dato) {
+            return (
+              <g key={x.fecha}>
+                {bgEl}
+                <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="9" fontWeight="600" fill="#ccc" fontFamily="system-ui">{x.d}</text>
+                {x.esFeriado && <text x={xc} y={H-PB+25} textAnchor="middle" fontSize="7" fontWeight="700" fill="#BA7517" fontFamily="system-ui">F</text>}
+              </g>
+            )
+          }
+          const val = x.dato.total
+          const p = pct(val, x.dato.objTotal)
+          const color = p >= 100 ? C.verde : p >= 80 ? C.naranja : C.rojo
+          const bH = Math.max(2, Math.round((val / maxVal) * chartH))
+          return (
+            <g key={x.fecha} onClick={() => onDiaClick(x.fecha)} style={{ cursor: 'pointer' }}>
+              {bgEl}
+              <rect x={px + (slot-barW)/2} y={yZero-bH} width={barW} height={bH} fill={color} rx="2" opacity=".9">
+                <title>{x.fecha} — {formatNum(val)} ({p}%)</title>
+              </rect>
+              {slot > 22 && <text x={xc} y={yZero-bH-4} textAnchor="middle" fontSize="8" fill={color} fontWeight="700" fontFamily="system-ui">{formatNum(val)}</text>}
+              <text x={xc} y={H-PB+14} textAnchor="middle" fontSize="9" fontWeight="700" fill="#555" fontFamily="system-ui">{x.d}</text>
+              <text x={xc} y={H-PB+25} textAnchor="middle" fontSize="7" fontWeight="600" fill={x.esFeriado ? '#BA7517' : '#bbb'} fontFamily="system-ui">{x.esFeriado ? 'F' : DIAS_CORTOS[x.dow].slice(0,1)}</text>
+            </g>
+          )
+        })}
+      </svg>
+      <div style={{ fontSize: '10px', color: '#bbb', marginTop: '6px', textAlign: 'center' }}>
+        Click en una barra para ver el detalle del día · fondo gris = fin de semana · fondo amarillo = feriado
+      </div>
+    </div>
+  )
+}
+
 // ── Tabla principal ───────────────────────────────────────────────────────────
 function TablaDias({ datos, onDiaClick }) {
   const [sortCol, setSortCol] = useState('fecha')
@@ -1263,7 +1350,7 @@ export default function Reportes({ onVolver }) {
   const [datos, setDatos] = useState({})
   const [cargando, setCargando] = useState(false)
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
-  const [vistaTabla, setVistaTabla] = useState(true)
+  const [modoMes, setModoMes] = useState('tabla') // 'calendario' | 'tabla' | 'grafico'
   const [usarEjemplos, setUsarEjemplos] = useState(true)
   const [config, setConfig] = useState(null)
   const [vista, setVista] = useState('mes') // 'mes' | 'semana' | 'resumen' | 'año' | 'comparar'
@@ -1434,11 +1521,11 @@ export default function Reportes({ onVolver }) {
             style={{ fontSize: '10px', padding: '3px 10px', borderRadius: '20px', border: `1px solid ${usarEjemplos ? C.naranja : C.azul}`, background: usarEjemplos ? C.naranjaClaro : C.azulClaro, color: usarEjemplos ? C.naranja : C.azul, cursor: 'pointer', fontWeight: '600' }}>
             {usarEjemplos ? '⚡ Ejemplo' : '🔥 Real'}
           </button>
-          {/* toggle calendario/tabla — solo en vista mes */}
+          {/* toggle calendario/tabla/gráfico — solo en vista mes */}
           {vista === 'mes' && <div style={{ display: 'flex', background: C.grisClaro, borderRadius: '8px', padding: '2px', border: `1px solid ${C.borde}` }}>
-            {[['📅', true, 'Calendario'], ['📋', false, 'Tabla']].map(([icon, v, label]) => (
-              <button key={label} onClick={() => setVistaTabla(!v)}
-                style={{ padding: '4px 10px', borderRadius: '6px', border: 'none', background: vistaTabla !== v ? '#fff' : 'transparent', cursor: 'pointer', fontSize: '11px', color: vistaTabla !== v ? C.texto : C.sub, fontWeight: vistaTabla !== v ? '600' : '400', boxShadow: vistaTabla !== v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
+            {[['📅','calendario','Calendario'], ['📋','tabla','Tabla'], ['📊','grafico','Gráfico']].map(([icon, v, label]) => (
+              <button key={v} onClick={() => setModoMes(v)}
+                style={{ padding: '4px 10px', borderRadius: '6px', border: 'none', background: modoMes === v ? '#fff' : 'transparent', cursor: 'pointer', fontSize: '11px', color: modoMes === v ? C.texto : C.sub, fontWeight: modoMes === v ? '600' : '400', boxShadow: modoMes === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
                 {icon} {label}
               </button>
             ))}
@@ -1505,34 +1592,40 @@ export default function Reportes({ onVolver }) {
         )}
 
         {!cargando && Object.keys(datos).length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: vistaTabla ? '1fr' : 'minmax(0,480px) 1fr', gap: '20px', alignItems: 'start' }}>
-
+          <>
             {/* calendario */}
-            {!vistaTabla && (
+            {modoMes === 'calendario' && (
               <div style={{ background: '#fff', borderRadius: '14px', border: `1px solid ${C.borde}`, padding: '18px 20px' }}>
                 <div style={{ fontSize: '12px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: '14px' }}>Calendario</div>
                 <Calendario y={anio} m={mes} datos={datos} feriados={feriados} onDiaClick={setDiaSeleccionado} diaSeleccionado={diaSeleccionado} onSemanaClick={s => { setSemanaSel(s); setVista('semana') }} />
               </div>
             )}
 
+            {/* gráfico de barras diario */}
+            {modoMes === 'grafico' && (
+              <GraficoBarrasMes y={anio} m={mes} datos={datos} feriados={feriados} onDiaClick={setDiaSeleccionado} />
+            )}
+
             {/* tabla */}
-            <div style={{ background: '#fff', borderRadius: '14px', border: `1px solid ${C.borde}`, overflow: 'hidden' }}>
-              <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.borde}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ fontSize: '12px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em' }}>
-                  Días del mes <span style={{ color: C.azul, fontWeight: '800' }}>({Object.keys(datosFiltrados).length})</span>
+            {modoMes === 'tabla' && (
+              <div style={{ background: '#fff', borderRadius: '14px', border: `1px solid ${C.borde}`, overflow: 'hidden' }}>
+                <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.borde}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                    Días del mes <span style={{ color: C.azul, fontWeight: '800' }}>({Object.keys(datosFiltrados).length})</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                    {[['todos','Todos'],['bajo','Bajo objetivo'],['nota','Con nota 📝']].map(([v,label]) => (
+                      <button key={v} onClick={() => setFiltroTabla(v)}
+                        style={{ fontSize: '10px', padding: '3px 10px', borderRadius: '20px', border: `1.5px solid ${filtroTabla === v ? C.azul : C.borde}`, background: filtroTabla === v ? C.azulClaro : '#fff', color: filtroTabla === v ? C.azul : C.sub, fontWeight: filtroTabla === v ? '700' : '400', cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                  {[['todos','Todos'],['bajo','Bajo objetivo'],['nota','Con nota 📝']].map(([v,label]) => (
-                    <button key={v} onClick={() => setFiltroTabla(v)}
-                      style={{ fontSize: '10px', padding: '3px 10px', borderRadius: '20px', border: `1.5px solid ${filtroTabla === v ? C.azul : C.borde}`, background: filtroTabla === v ? C.azulClaro : '#fff', color: filtroTabla === v ? C.azul : C.sub, fontWeight: filtroTabla === v ? '700' : '400', cursor: 'pointer' }}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <TablaDias datos={datosFiltrados} onDiaClick={setDiaSeleccionado} />
               </div>
-              <TablaDias datos={datosFiltrados} onDiaClick={setDiaSeleccionado} />
-            </div>
-          </div>
+            )}
+          </>
         )}
 
         </>)}
