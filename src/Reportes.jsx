@@ -225,14 +225,18 @@ function GraficoBarrasMes({ y, m, datos, feriados = [], onDiaClick }) {
     const conDato = Object.values(datos)[0]
     return conDato?.objTotal || 0
   })()
-  const maxVal = Math.max(...dias.map(x => x.dato?.total || 0), objDia, 1) * 1.12
+  // escala según la producción real, no el objetivo (evita aplastar las barras)
+  const maxProd = Math.max(...dias.map(x => x.dato?.total || 0), 1)
+  const maxVal = maxProd * 1.15
+  // el objetivo se dibuja solo si entra en la escala; si no, se indica aparte
+  const objVisible = objDia > 0 && objDia <= maxVal
 
   const W = 1000, H = 280, PT = 24, PB = 44, PX = 8
   const slot = (W - PX * 2) / dias.length
   const barW = Math.max(8, slot - 4)
   const chartH = H - PT - PB
   const yZero = PT + chartH
-  const yObj = objDia > 0 ? PT + chartH - Math.round((objDia / maxVal) * chartH) : null
+  const yObj = objVisible ? PT + chartH - Math.round((objDia / maxVal) * chartH) : null
 
   return (
     <div style={{ background: '#fff', borderRadius: '14px', border: `1px solid ${C.borde}`, padding: '18px 20px' }}>
@@ -242,11 +246,13 @@ function GraficoBarrasMes({ y, m, datos, feriados = [], onDiaClick }) {
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: C.verde }} />≥100%</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: C.naranja }} />80–99%</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: C.rojo }} />&lt;80%</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '14px', height: '0', borderTop: '1.5px dashed #C8B89A' }} />Objetivo</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.sub }}><span style={{ width: '14px', height: '0', borderTop: '1.5px dashed #C8B89A' }} />Objetivo {!objVisible && objDia > 0 ? `(${formatNum(objDia)}, fuera de escala)` : ''}</span>
         </div>
       </div>
+      {/* FUTURO: cabezas faenadas por día — segundo eje Y a la derecha (línea sobre las barras).
+          Cuando exista x.dato.cabezas, dibujar polyline escalada con maxCabezas y eje derecho. */}
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-        {/* línea de objetivo */}
+        {/* línea de objetivo — solo si entra en la escala */}
         {yObj != null && (
           <>
             <line x1={PX} y1={yObj} x2={W-PX} y2={yObj} stroke="#C8B89A" strokeWidth="1.3" strokeDasharray="5 3" />
