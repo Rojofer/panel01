@@ -341,19 +341,26 @@ function TablaDias({ datos, onDiaClick }) {
       </table>
 
       {seleccionados.size > 0 && (() => {
-        const sel = filas.filter(f => seleccionados.has(f.fecha))
-        const tG   = sel.reduce((s,f) => s + (f.grande||0), 0)
-        const tC   = sel.reduce((s,f) => s + (f.chica||0), 0)
-        const tT   = sel.reduce((s,f) => s + (f.total||0), 0)
-        const tObj = sel.reduce((s,f) => s + (f.objTotal||0), 0)
+        const sel   = filas.filter(f => seleccionados.has(f.fecha))
+        const tG    = sel.reduce((s,f) => s + (f.grande||0), 0)
+        const tC    = sel.reduce((s,f) => s + (f.chica||0), 0)
+        const tT    = sel.reduce((s,f) => s + (f.total||0), 0)
+        const tObj  = sel.reduce((s,f) => s + (f.objTotal||0), 0)
         const tNeto = sel.reduce((s,f) => s + (f.tiempoNeto||0), 0)
-        const efic = tNeto > 0 ? Math.round(tT / (tNeto / 60)) : null
-        const p = pct(tT, tObj)
+        const tDesc = sel.reduce((s,f) => s + (f.descansos||0), 0)
+        const tL1   = sel.reduce((s,f) => s + (f.L1||0), 0)
+        const tL2   = sel.reduce((s,f) => s + (f.L2||0), 0)
+        const tL3   = sel.reduce((s,f) => s + (f.L3||0), 0)
+        const tL4   = sel.reduce((s,f) => s + (f.L4||0), 0)
+        const tL5   = sel.reduce((s,f) => s + (f.L5||0), 0)
+        const efic  = tNeto > 0 ? Math.round(tT / (tNeto / 60)) : null
+        const p     = pct(tT, tObj)
         const pColor = p >= 100 ? C.verde : p >= 80 ? C.naranja : C.rojo
         const pBg    = p >= 100 ? C.verdeClaro : p >= 80 ? C.naranjaClaro : C.rojoClaro
         return (
-          <div style={{ border: `2px solid ${C.azul}`, borderTop: 'none', borderRadius: '0 0 14px 14px', background: C.azulClaro, padding: '12px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <div style={{ border: `2px solid ${C.azul}`, borderTop: 'none', borderRadius: '0 0 14px 14px', background: C.azulClaro, padding: '14px 16px' }}>
+            {/* header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <span style={{ fontSize: '11px', fontWeight: '700', color: C.azul, textTransform: 'uppercase', letterSpacing: '.07em' }}>
                 {seleccionados.size} día{seleccionados.size > 1 ? 's' : ''} seleccionado{seleccionados.size > 1 ? 's' : ''}
               </span>
@@ -362,13 +369,16 @@ function TablaDias({ datos, onDiaClick }) {
                 Limpiar
               </button>
             </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+
+            {/* fila 1: producción + cumplimiento + eficiencia */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
               {[
-                ['Total',        formatNum(tT),        `de ${formatNum(tObj)}`, C.texto,  null],
-                ['Cumplimiento', `${p}%`,              `${tT >= tObj ? '+' : ''}${formatNum(tT - tObj)}`, pColor, pBg],
-                ['Grande',       formatNum(tG),        null,                    C.texto,  null],
-                ['Chica',        formatNum(tC),        null,                    C.texto,  null],
-                efic ? ['Eficiencia', `${efic}/h`,     `${Math.round(tNeto/60)}h netas`, C.azul, null] : null,
+                ['Total',        formatNum(tT),   `de ${formatNum(tObj)}`,                              C.texto, null],
+                ['Cumplimiento', `${p}%`,         `${tT >= tObj ? '+' : ''}${formatNum(tT - tObj)}`,    pColor,  pBg],
+                ['Grande',       formatNum(tG),   null,                                                  C.texto, null],
+                ['Chica',        formatNum(tC),   null,                                                  C.texto, null],
+                efic ? ['Eficiencia', `${efic}/h`, `${Math.round(tNeto/60)}h netas`,                    C.azul,  null] : null,
+                tDesc > 0 ? ['Descanso', `${tDesc}m`, `${seleccionados.size} día${seleccionados.size>1?'s':''}`, C.naranja, C.naranjaClaro] : null,
               ].filter(Boolean).map(([label, value, sub, color, bg]) => (
                 <div key={label} style={{ background: bg || '#fff', borderRadius: '9px', padding: '8px 12px', border: `1px solid ${C.azulBorde}` }}>
                   <div style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '2px' }}>{label}</div>
@@ -377,6 +387,27 @@ function TablaDias({ datos, onDiaClick }) {
                 </div>
               ))}
             </div>
+
+            {/* fila 2: desglose por línea */}
+            {(tL1 + tL2 + tL3 + tL4 + tL5) > 0 && (
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '9px', fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: '.06em', alignSelf: 'center', marginRight: '4px' }}>Por línea:</span>
+                {[['L1',tL1],['L2',tL2],['L3',tL3],['L4',tL4]].filter(([,v])=>v>0).map(([l,v]) => (
+                  <div key={l} style={{ background: '#fff', borderRadius: '8px', padding: '6px 10px', border: `1px solid ${C.azulBorde}`, display: 'flex', alignItems: 'baseline', gap: '5px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: '700', color: C.azul }}>{l}</span>
+                    <span style={{ fontSize: '14px', fontWeight: '800', color: C.azul }}>{formatNum(v)}</span>
+                    <span style={{ fontSize: '9px', color: C.sub }}>{Math.round(v/tG*100)}%</span>
+                  </div>
+                ))}
+                {tL5 > 0 && (
+                  <div style={{ background: '#fff', borderRadius: '8px', padding: '6px 10px', border: '1px solid #F5D79A', display: 'flex', alignItems: 'baseline', gap: '5px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: '700', color: C.naranja }}>L5</span>
+                    <span style={{ fontSize: '14px', fontWeight: '800', color: C.naranja }}>{formatNum(tL5)}</span>
+                    <span style={{ fontSize: '9px', color: C.sub }}>chica</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )
       })()}
