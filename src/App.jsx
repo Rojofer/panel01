@@ -4,7 +4,6 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import Login from './Login'
 import Tablero from './Tablero'
-import Informe from './Informe'
 import Reportes from './Reportes'
 
 export default function App() {
@@ -40,14 +39,12 @@ export default function App() {
   )
 
   if (!user) return <Login />
-  if (vista === 'informe')  return <Informe  onVolver={() => setVista('tablero')} />
   if (vista === 'reportes') return <Reportes onVolver={() => setVista('tablero')} />
 
   return (
     <Tablero
       user={user}
       userData={userData}
-      onVerInforme={() => setVista('informe')}
       onVerReportes={() => setVista('reportes')}
     />
   )
